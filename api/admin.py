@@ -1,0 +1,21 @@
+from django.contrib import admin
+from .models import Profile, OTP, Wallet, CoinTransaction, DeletionRequest, Game, GameSession, LevelProgress, Offer, LeagueTier, CallSession, Payment, Withdrawal, Room, Message, Story, Badge, DailyReward
+
+admin.site.register(Profile)
+admin.site.register(OTP)
+admin.site.register(Wallet)
+admin.site.register(CoinTransaction)
+admin.site.register(DeletionRequest)
+admin.site.register(Game)
+admin.site.register(GameSession)
+admin.site.register(LevelProgress)
+admin.site.register(Offer)
+admin.site.register(LeagueTier)
+admin.site.register(CallSession)
+admin.site.register(Payment)
+admin.site.register(Withdrawal)
+admin.site.register(Room)
+admin.site.register(Message)
+admin.site.register(Story)
+admin.site.register(Badge)
+admin.site.register(DailyReward)

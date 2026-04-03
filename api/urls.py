@@ -1,0 +1,42 @@
+from django.urls import path, include
+from . import views
+
+urlpatterns = [
+    path('auth/', include('api.modules.auth.urls')),
+    path('friends/', include('api.modules.friends.urls')),
+    path('close-friends/', include('api.modules.close_friends.urls')),
+    path('streaks/', include('api.modules.streaks.urls')),
+
+    path('wallet/', include('api.modules.wallet.urls')),
+    path('games/', include('api.modules.games.urls')),
+    path('gamification/', include('api.modules.gamification.urls')),
+    path('offers/', include('api.modules.offers.urls')),
+    path('profiles/', include('api.modules.profiles.urls')),
+    path('stories/', include('api.modules.stories.urls')),
+    path('reels/', include('api.modules.reels.urls')),
+    path('chat/', include('api.modules.chat.urls')),
+    path('reports/', include('api.modules.reports.urls')),
+    path('gifts/', include('api.modules.gifts.urls')),
+    path('uploads/', include('api.modules.uploads.urls')),
+    path('admin/', include('api.modules.admin.urls')),
+    path('posts/', include('api.modules.posts.urls')),
+    path('archive/', include('api.modules.archive.urls')),
+    path('settings/', include('api.modules.settings.urls')),
+    path('notifications/', include('api.modules.notifications.urls')),
+    path('betmatch/', include('api.modules.betmatch.urls')),
+    path('security/', include('api.modules.security.urls')),
+    path('leaderboard/', include('api.modules.leaderboard.urls')),
+    path('calls/', include('api.modules.calls.urls')),
+    path('league/', include('api.modules.league.urls')),
+    path('levels/', include('api.modules.levels.urls')),
+    path('monetization/', include('api.modules.monetization.urls')),
+
+    # Legacy endpoints remain accessible if needed
+    path('health/', views.health_check),
+    path('webhook', views.whatsapp_webhook),
+    # path('auth/me/', views.me),
+    # path('wallet/', views.wallet),
+    # path('wallet/transactions/', views.wallet_transactions),
+    # path('account/delete/request/', views.delete_request),
+    # path('account/delete/confirm/', views.delete_confirm),
+]
