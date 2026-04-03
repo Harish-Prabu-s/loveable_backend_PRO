@@ -164,7 +164,7 @@ class DailyRewardSerializer(serializers.ModelSerializer):
 class RoomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Room
-        fields = ['id', 'caller', 'receiver', 'call_type', 'status', 'started_at', 'ended_at', 'duration_seconds', 'coins_spent', 'created_at', 'disappearing_messages_enabled', 'disappearing_timer']
+        fields = ['id', 'caller', 'receiver', 'call_type', 'status', 'started_at', 'ended_at', 'duration_seconds', 'coins_spent', 'created_at', 'chat_theme', 'disappearing_messages_enabled', 'disappearing_timer']
 
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
