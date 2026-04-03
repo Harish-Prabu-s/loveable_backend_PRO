@@ -343,7 +343,7 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
 
     async def participant_joined(self, event):
         # Notify client about a new participant
-        if event['user_id'] != self.user_id:
+        if str(event['user_id']) != str(self.user_id):
             await self.send(text_data=json.dumps({
                 'type': 'participant-joined',
                 'user_id': event['user_id'],
@@ -353,7 +353,7 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
             }))
 
     async def participant_left(self, event):
-        if event['user_id'] != self.user_id:
+        if str(event['user_id']) != str(self.user_id):
             await self.send(text_data=json.dumps({
                 'type': 'participant-left',
                 'user_id': event['user_id'],
@@ -366,11 +366,11 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
 
         # If targeted, only send to the target
         if target_id is not None:
-            if target_id == self.user_id:
+            if str(target_id) == str(self.user_id):
                 await self.send(text_data=json.dumps(message))
         else:
             # Broadcast to everyone EXCEPT sender
-            if message.get('from_user_id') != self.user_id:
+            if str(message.get('from_user_id')) != str(self.user_id):
                 await self.send(text_data=json.dumps(message))
 
     async def chat_message(self, event):
