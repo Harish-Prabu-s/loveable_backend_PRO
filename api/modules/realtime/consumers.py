@@ -7,6 +7,7 @@ from asgiref.sync import sync_to_async
 logger = logging.getLogger(__name__)
 
 
+
 class BaseRealtimeConsumer(AsyncWebsocketConsumer):
     """
     Base consumer providing common functionality like heartbeat (ping/pong)
@@ -163,7 +164,7 @@ class ChatConsumer(BaseRealtimeConsumer):
         elif data.get('type') == 'mark_seen':
             room_id = data.get('room_id')
             if not room_id: return
-            
+
             # Relay to all participants
             participants = await self.get_room_participants(room_id)
             for u_id in participants:
