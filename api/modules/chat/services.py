@@ -271,11 +271,11 @@ def update_room_theme(room_id: int, chat_theme: str):
         from asgiref.sync import async_to_sync
         channel_layer = get_channel_layer()
         if channel_layer:
-            # Notify both participants
-            participants = [room.caller.id, room.receiver.id]
-            for user_id in participants:
+            # Notify both
+            participants = [room.caller_id, room.receiver_id]
+            for u_id in participants:
                 async_to_sync(channel_layer.group_send)(
-                    f'chat_{user_id}',
+                    f'chat_{u_id}',
                     {
                         'type': 'send_message',
                         'content': {
@@ -289,6 +289,7 @@ def update_room_theme(room_id: int, chat_theme: str):
     except Room.DoesNotExist:
         return False
     except Exception as e:
+        import traceback
         import logging
-        logging.getLogger(__name__).error(f"Error updating room theme: {e}")
+        logging.getLogger(__name__).error(f"Error updating room theme: {e}\n{traceback.format_exc()}")
         return False
