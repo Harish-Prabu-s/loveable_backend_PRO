@@ -2,7 +2,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from ...serializers import RoomSerializer, MessageSerializer, ContactSerializer, StreakSerializer
-from .services import get_or_create_room, list_my_rooms, list_messages, send_message, presence_status, mark_room_status, mark_messages_seen
+from .services import (
+    get_or_create_room, list_my_rooms, list_messages, send_message, 
+    presence_status, mark_room_status, mark_messages_seen, update_room_theme
+)
 from django.db.models import Q, Max
 from django.contrib.auth.models import User
 
@@ -173,6 +176,18 @@ def contact_list_view(request):
         import logging
         logging.getLogger(__name__).error(f"Error in contact_list_view: {e}")
         return Response([])
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_theme_view(request, room_id: int):
+    chat_theme = request.data.get('chat_theme')
+    if not chat_theme:
+        return Response({'error': 'chat_theme required'}, status=400)
+    
+    success = update_room_theme(room_id, chat_theme)
+    if success:
+        return Response({'status': 'ok'})
+    return Response({'error': 'Failed to update theme or Room not found'}, status=400)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

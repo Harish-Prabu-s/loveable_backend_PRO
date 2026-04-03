@@ -258,3 +258,37 @@ def unarchive_room(room_id: int, user: User):
         return True
     except Room.DoesNotExist:
         return False
+
+def update_room_theme(room_id: int, chat_theme: str):
+    """Update the chat theme and notify participants."""
+    try:
+        room = Room.objects.get(id=room_id)
+        room.chat_theme = chat_theme
+        room.save(update_fields=['chat_theme'])
+        
+        # Notify Participants in Real-Time
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            # Notify both participants
+            participants = [room.caller.id, room.receiver.id]
+            for user_id in participants:
+                async_to_sync(channel_layer.group_send)(
+                    f'chat_{user_id}',
+                    {
+                        'type': 'send_message',
+                        'content': {
+                            'type': 'theme_updated',
+                            'room_id': room.id,
+                            'theme_id': chat_theme
+                        }
+                    }
+                )
+        return True
+    except Room.DoesNotExist:
+        return False
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error updating room theme: {e}")
+        return False
