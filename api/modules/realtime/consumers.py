@@ -6,12 +6,14 @@ from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
+
 class BaseRealtimeConsumer(AsyncWebsocketConsumer):
     """
     Base consumer providing common functionality like heartbeat (ping/pong)
     and user-specific group management.
     """
     channel_type = "base"
+
 
     async def connect(self):
         self.user_id = self.scope['url_route']['kwargs'].get('user_id')
@@ -248,8 +250,10 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
             await self.accept()
             logger.info(f"[WS Call] User {self.user_id} ACCEPTED. Room: {self.room_id}")
     
-            # Notify others and get current participants
-            # Use the helper to fetch DB data safely
+            # 1. Track presence (Join)
+            await self.track_presence(join=True)
+            
+            # 2. Notify others and get current participants
             profile_data = await self.get_user_profile_data()
     
             await self.channel_layer.group_send(
@@ -262,6 +266,19 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
                     'from_channel': self.channel_name
                 }
             )
+
+            # 4. SEND EXISTING PARTICIPANTS TO THE NEW USER
+            # This ensures both sides recognize each other even if they join at slightly different times.
+            active_participants = await self.get_active_participants()
+            for pid, metadata in active_participants.items():
+                if str(pid) != str(self.user_id):
+                    await self.send(text_data=json.dumps({
+                        'type': 'participant-joined',
+                        'user_id': pid,
+                        'from_user_id': pid,
+                        'display_name': metadata.get('display_name'),
+                        'photo': metadata.get('photo')
+                    }))
             
             logger.info(f"[WS Call] User {self.user_id} joined room {self.room_id}")
         except Exception as e:
@@ -270,7 +287,10 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         if hasattr(self, 'room_group_name'):
-            # Notify others
+            # 1. Remove from presence
+            await self.track_presence(join=False)
+            
+            # 2. Notify others
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -358,8 +378,36 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({
                 'type': 'participant-left',
                 'user_id': event['user_id'],
-                'from_user_id': event['user_id']  # Added for consistency
+                'from_user_id': event['user_id']
             }))
+
+    # ── Presence Helpers ─────────────────────────────────────────────────────
+
+    async def track_presence(self, join=True):
+        """Track user presence in the room using the channel layer or cache."""
+        from django.core.cache import cache
+        presence_key = f"presence_{self.room_group_name}"
+        
+        # Get profile data safely
+        profile_data = await self.get_user_profile_data()
+        user_info = {
+            'user_id': self.user_id,
+            'display_name': profile_data['display_name'],
+            'photo': profile_data['photo']
+        }
+        
+        current_presence = cache.get(presence_key, {})
+        if join:
+            current_presence[str(self.user_id)] = user_info
+        else:
+            current_presence.pop(str(self.user_id), None)
+            
+        cache.set(presence_key, current_presence, timeout=3600) # 1 hour TTL
+    async def get_active_participants(self):
+        """Fetch current presence from cache."""
+        from django.core.cache import cache
+        presence_key = f"presence_{self.room_group_name}"
+        return cache.get(presence_key, {})
 
     async def relay_signal(self, event):
         message = event['message']
