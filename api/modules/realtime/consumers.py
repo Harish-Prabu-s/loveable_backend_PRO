@@ -233,11 +233,12 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
             self.user = self.scope.get('user')
     
             if not self.user or self.user.is_anonymous:
-                logger.warning(f"[WS Call] REJECTED (Unauthenticated). Room: {self.room_id}")
+                logger.warning(f"[WS Call] REJECTED: User is Anonymous or Token invalid. Room: {self.room_id}")
                 await self.close(code=4001)
                 return
     
             self.user_id = self.user.id
+            logger.info(f"[WS Call] Authenticated user {self.user_id} connecting to room {self.room_id}")
             
             # Add to room group
             await self.channel_layer.group_add(
