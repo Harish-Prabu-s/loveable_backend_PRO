@@ -308,6 +308,7 @@ class Message(models.Model):
     duration_seconds = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     is_seen = models.BooleanField(default=False)
+    seen_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     reply_to = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replies')
 

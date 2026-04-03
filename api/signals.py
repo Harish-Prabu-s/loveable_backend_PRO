@@ -2,7 +2,7 @@ import logging
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth.models import User
-from .models import Post, PostLike, PostComment, Reel, ReelLike, ReelComment, Story, StoryLike, StoryComment, FollowRequest, FriendRequest, Message, Streak
+from .models import Post, PostLike, PostComment, Reel, ReelLike, ReelComment, Story, StoryLike, StoryComment, FollowRequest, FriendRequest, Message, Streak, StreakLike, StreakComment, StreakReaction
 from .modules.notifications.fcm_service import send_action_notification, notify_followers, notify_streak_update
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,24 @@ def notify_friend_request(sender, instance, created, **kwargs):
     elif instance.status == 'accepted':
         send_action_notification(instance.to_user.username, instance.from_user.id, 'friend_request_accepted', object_id=instance.to_user.id)
 
+# --- Streak Activity ---
+
+@receiver(post_save, sender=StreakLike)
+def notify_streak_like(sender, instance, created, **kwargs):
+    if created and instance.user != instance.streak_upload.user:
+        send_action_notification(instance.user.username, instance.streak_upload.user.id, 'streak_like', object_id=instance.streak_upload.id)
+
+@receiver(post_save, sender=StreakComment)
+def notify_streak_comment(sender, instance, created, **kwargs):
+    if created and instance.user != instance.streak_upload.user:
+        send_action_notification(instance.user.username, instance.streak_upload.user.id, 'streak_comment', object_id=instance.streak_upload.id)
+
+@receiver(post_save, sender=StreakReaction)
+def notify_streak_reaction(sender, instance, created, **kwargs):
+    if created and instance.user != instance.recipient:
+        send_action_notification(instance.user.username, instance.recipient.id, f"streak_{instance.reaction_type}", object_id=instance.streak_upload_id)
+
+
 # --- Messages & Streaks ---
 
 @receiver(post_save, sender=Message)
@@ -68,7 +86,8 @@ def notify_new_message(sender, instance, created, **kwargs):
         actor = instance.sender
         room = instance.room
         recipient = room.receiver if room.caller == actor else room.caller
-        if room.status == 'active': return
+        # We only skip if the recipient is the actor (shouldn't happen) or if we later add a more robust "is_viewing" check
+        if actor == recipient: return
         send_action_notification(actor.username, recipient.id, 'chat_message', object_id=room.id, extra_data={'body': instance.content[:50]})
 
 @receiver(post_save, sender=Streak)

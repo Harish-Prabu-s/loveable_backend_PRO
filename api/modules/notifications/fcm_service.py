@@ -93,6 +93,9 @@ def send_action_notification(actor_name: str, recipient_id: int, action_type: st
         'friend_request_accepted': f"{actor_name} accepted your friend request.",
         'chat_message': f"New message from {actor_name}",
         'incoming-call': f"{actor_name} is calling you...",
+        'streak_fire': f"{actor_name} gave a fire 🔥 to your streak!",
+        'streak_like': f"{actor_name} liked your streak update.",
+        'streak_comment': f"{actor_name} commented on your streak.",
     }
     
     title = "New Notification"
@@ -104,6 +107,8 @@ def send_action_notification(actor_name: str, recipient_id: int, action_type: st
         title = "New Comment!"
     elif 'friend' in action_type:
         title = "Friend Update"
+    elif 'streak' in action_type:
+        title = "🔥 Streak Update!"
 
     body = MESSAGES.get(action_type, f"New activity from {actor_name}")
     

@@ -169,7 +169,7 @@ class RoomSerializer(serializers.ModelSerializer):
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
-        fields = ['id', 'room', 'sender', 'content', 'type', 'media_url', 'duration_seconds', 'created_at', 'is_seen', 'expires_at', 'reply_to']
+        fields = ['id', 'room', 'sender', 'content', 'type', 'media_url', 'duration_seconds', 'created_at', 'is_seen', 'seen_at', 'expires_at', 'reply_to']
 
 class StreakSerializer(serializers.ModelSerializer):
     class Meta:

@@ -102,13 +102,14 @@ def mark_messages_seen(room_id: int, user: User):
             MessageSeen.objects.get_or_create(message=msg, user=user)
             msgs_to_update.append(msg)
             
-        # For 1v1, also update is_seen boolean
+        # For 1v1, also update is_seen boolean and seen_at
         if not room.is_group:
+            now = timezone.now()
             if room.disappearing_messages_enabled and room.disappearing_timer > 0:
-                expiry_time = timezone.now() + timedelta(seconds=room.disappearing_timer)
-                unseen_msgs.update(is_seen=True, expires_at=expiry_time)
+                expiry_time = now + timedelta(seconds=room.disappearing_timer)
+                unseen_msgs.update(is_seen=True, seen_at=now, expires_at=expiry_time)
             else:
-                unseen_msgs.update(is_seen=True)
+                unseen_msgs.update(is_seen=True, seen_at=now)
         
         # Notify Participants in Real-Time
         from channels.layers import get_channel_layer
