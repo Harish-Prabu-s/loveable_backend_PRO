@@ -7,7 +7,7 @@ from django.db import models
 
 def get_feed(user):
     """Return all posts optimized with counts and like status."""
-    from django.db.models import Count, Exists, OuterRef
+    from django.db.models import Count, Exists, OuterRef, F
     
     # Subquery to check if current user liked the post
     is_liked_subquery = PostLike.objects.filter(
@@ -16,16 +16,18 @@ def get_feed(user):
     )
     
     return Post.objects.select_related('user__profile').annotate(
-        likes_count=Count('likes', distinct=True),
-        comments_count=Count('comments', distinct=True),
+        lcount=Count('likes', distinct=True),
+        ccount=Count('comments', distinct=True),
         is_liked=Exists(is_liked_subquery)
+    ).annotate(
+        popularity_score=(F('lcount') * 2) + (F('ccount') * 5)
     ).filter(
         models.Q(is_archived=False) & (
             models.Q(visibility='all') | 
             models.Q(user=user) | 
             (models.Q(visibility='close_friends') & models.Q(user__close_friends__close_friend=user))
         )
-    ).order_by('-created_at').distinct()
+    ).order_by('-popularity_score', '-created_at').distinct()
 
 
 import base64

@@ -4,7 +4,8 @@ from rest_framework.response import Response
 from ...serializers import RoomSerializer, MessageSerializer, ContactSerializer, StreakSerializer
 from .services import (
     get_or_create_room, list_my_rooms, list_messages, send_message, 
-    presence_status, mark_room_status, mark_messages_seen, update_room_theme
+    presence_status, mark_room_status, mark_messages_seen, update_room_theme,
+    create_group_room, add_group_member
 )
 from django.db.models import Q, Max
 from django.contrib.auth.models import User
@@ -19,6 +20,46 @@ def create_room_view(request):
             return Response({'error': 'receiver_id required'}, status=400)
         room = get_or_create_room(request.user, int(receiver_id), call_type)
         return Response(RoomSerializer(room).data, status=201)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def room_detail_view(request, room_id: int):
+    try:
+        from ...models import Room
+        # Allow if user is caller, receiver or a group member
+        room = Room.objects.get(id=room_id)
+        is_member = room.caller == request.user or room.receiver == request.user
+        if not is_member and room.is_group:
+            is_member = room.members.filter(user=request.user).exists()
+            
+        if not is_member:
+            return Response({'error': 'forbidden'}, status=403)
+            
+        return Response(RoomSerializer(room).data)
+    except Room.DoesNotExist:
+        return Response({'error': 'Room not found'}, status=404)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def room_detail_view(request, room_id: int):
+    try:
+        from ...models import Room
+        # Allow if user is caller, receiver or a group member
+        room = Room.objects.get(id=room_id)
+        is_member = room.caller == request.user or room.receiver == request.user
+        if not is_member and room.is_group:
+            is_member = room.members.filter(user=request.user).exists()
+            
+        if not is_member:
+            return Response({'error': 'forbidden'}, status=403)
+            
+        return Response(RoomSerializer(room).data)
+    except Room.DoesNotExist:
+        return Response({'error': 'Room not found'}, status=404)
     except Exception as e:
         return Response({'error': str(e)}, status=400)
 
@@ -194,3 +235,34 @@ def update_theme_view(request, room_id: int):
 def streak_leaderboard_view(request):
     # This was moved to streaks module
     return Response({'error': 'Moved to /api/streaks/leaderboard/'}, status=308)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_group_view(request):
+    try:
+        name = request.data.get('name')
+        user_ids = request.data.get('user_ids', [])
+        avatar = request.data.get('group_avatar')
+        
+        if not name:
+            return Response({'error': 'Group name required'}, status=400)
+            
+        room = create_group_room(request.user, name, user_ids, avatar)
+        return Response(RoomSerializer(room).data, status=201)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_member_view(request, room_id: int):
+    try:
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response({'error': 'user_id required'}, status=400)
+            
+        success = add_group_member(room_id, int(user_id))
+        if success:
+            return Response({'status': 'member added'})
+        return Response({'error': 'Failed to add member'}, status=400)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)

@@ -5,13 +5,20 @@ from django.db import models
 
 def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False):
     offset = (page - 1) * limit
+    from django.db.models import Count, F
+    
     qs = Reel.objects.select_related('user__profile').filter(
         models.Q(is_archived=False) & (
             models.Q(visibility='all') | 
             models.Q(user=user) | 
             (models.Q(visibility='close_friends') & models.Q(user__close_friends__close_friend=user))
         )
-    ).order_by('-created_at').distinct()[offset:offset+limit]
+    ).annotate(
+        lcount=Count('likes', distinct=True),
+        ccount=Count('comments', distinct=True)
+    ).annotate(
+        popularity_score=(F('lcount') * 2) + (F('ccount') * 5)
+    ).order_by('-popularity_score', '-created_at').distinct()[offset:offset+limit]
     
     qs = list(qs)
     

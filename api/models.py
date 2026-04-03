@@ -280,7 +280,7 @@ class Room(models.Model):
         ('video', 'Video'),
     )
     caller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rooms_started')
-    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rooms_received')
+    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='rooms_received', null=True, blank=True)
     call_type = models.CharField(max_length=10, choices=CALL_TYPE_CHOICES)
     status = models.CharField(max_length=10, default='pending')  # pending/active/ended
     started_at = models.DateTimeField(null=True, blank=True)
@@ -292,6 +292,11 @@ class Room(models.Model):
     disappearing_messages_enabled = models.BooleanField(default=False)
     disappearing_timer = models.IntegerField(default=0) # 0 means off, otherwise in seconds
     is_archived = models.BooleanField(default=False)
+    
+    # Group Chat Extension
+    is_group = models.BooleanField(default=False)
+    name = models.CharField(max_length=100, null=True, blank=True)
+    group_avatar = models.URLField(null=True, blank=True)
 
 
 class Message(models.Model):
@@ -304,6 +309,37 @@ class Message(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_seen = models.BooleanField(default=False)
     expires_at = models.DateTimeField(null=True, blank=True)
+    reply_to = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replies')
+
+class RoomMember(models.Model):
+    ROLE_CHOICES = (
+        ('admin', 'Admin'),
+        ('member', 'Member'),
+    )
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='members')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='member')
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('room', 'user')
+
+class MessageSeen(models.Model):
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name='seen_by_users')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    seen_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('message', 'user')
+
+class MessageReaction(models.Model):
+    message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name='reactions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    emoji = models.CharField(max_length=50) # store emoji or symbol key
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('message', 'user', 'emoji')
 
 
 class Streak(models.Model):

@@ -4,7 +4,7 @@ from django.db.models import F
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
-from ...models import Room, Message, Streak
+from ...models import Room, Message, Streak, RoomMember, MessageSeen, MessageReaction
 
 def get_or_create_room(caller: User, receiver_id: int, call_type: str) -> Room:
     receiver = User.objects.get(id=receiver_id)
@@ -39,8 +39,48 @@ def get_or_create_room(caller: User, receiver_id: int, call_type: str) -> Room:
                 
     return room
 
+def create_group_room(creator: User, name: str, member_ids: list[int], avatar: Optional[str] = None) -> Room:
+    """Create a new group room and add the specified members."""
+    room = Room.objects.create(
+        caller=creator,
+        is_group=True,
+        name=name,
+        group_avatar=avatar,
+        status='pending'
+    )
+    
+    # Add creator as admin
+    RoomMember.objects.create(room=room, user=creator, role='admin')
+    
+    # Add other members
+    for m_id in member_ids:
+        if m_id != creator.id:
+            try:
+                user = User.objects.get(id=m_id)
+                RoomMember.objects.create(room=room, user=user, role='member')
+                # Optional: Send push notification about group invite
+            except User.DoesNotExist:
+                continue
+                
+    return room
+
+def add_group_member(room_id: int, user_id: int) -> bool:
+    """Add a new member to an existing group room."""
+    try:
+        room = Room.objects.get(id=room_id, is_group=True)
+        user = User.objects.get(id=user_id)
+        RoomMember.objects.get_or_create(room=room, user=user)
+        return True
+    except (Room.DoesNotExist, User.DoesNotExist):
+        return False
+
 def list_my_rooms(user: User):
-    return Room.objects.filter(is_archived=False).filter(models.Q(caller=user) | models.Q(receiver=user)).order_by('-created_at')
+    # Get private rooms where user is caller or receiver
+    private_rooms = Room.objects.filter(is_archived=False, is_group=False).filter(models.Q(caller=user) | models.Q(receiver=user))
+    # Get group rooms where user is a member
+    group_rooms = Room.objects.filter(is_archived=False, is_group=True, members__user=user)
+    
+    return (private_rooms | group_rooms).distinct().order_by('-created_at')
 
 def list_messages(room_id: int):
     room = Room.objects.get(id=room_id)
@@ -54,32 +94,49 @@ def list_messages(room_id: int):
 def mark_messages_seen(room_id: int, user: User):
     try:
         room = Room.objects.get(id=room_id)
-        # Identify the recipient of the seen notification
-        other_user = room.receiver if room.caller == user else room.caller
-        
         unseen_msgs = Message.objects.filter(room_id=room_id, is_seen=False).exclude(sender=user)
         
-        if room.disappearing_messages_enabled and room.disappearing_timer > 0:
-            expiry_time = timezone.now() + timedelta(seconds=room.disappearing_timer)
-            unseen_msgs.update(is_seen=True, expires_at=expiry_time)
-        else:
-            unseen_msgs.update(is_seen=True)
+        # Mark as seen in per-user tracking
+        msgs_to_update = []
+        for msg in unseen_msgs:
+            MessageSeen.objects.get_or_create(message=msg, user=user)
+            msgs_to_update.append(msg)
             
-        # Notify sender that their messages were read
+        # For 1v1, also update is_seen boolean
+        if not room.is_group:
+            if room.disappearing_messages_enabled and room.disappearing_timer > 0:
+                expiry_time = timezone.now() + timedelta(seconds=room.disappearing_timer)
+                unseen_msgs.update(is_seen=True, expires_at=expiry_time)
+            else:
+                unseen_msgs.update(is_seen=True)
+        
+        # Notify Participants in Real-Time
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
         channel_layer = get_channel_layer()
         if channel_layer:
-            async_to_sync(channel_layer.group_send)(
-                f'chat_{other_user.id}',
-                {
-                    'type': 'send_message',
-                    'content': {
-                        'type': 'messages_seen',
-                        'room_id': room.id
-                    }
-                }
-            )
+            # Group specific: broadcast who saw what
+            targets = []
+            if room.is_group:
+                targets = [m.user_id for m in room.members.all()]
+            else:
+                other_user = room.receiver if room.caller == user else room.caller
+                targets = [other_user.id]
+
+            for u_id in targets:
+                if u_id != user.id:
+                    async_to_sync(channel_layer.group_send)(
+                        f'chat_{u_id}',
+                        {
+                            'type': 'send_message',
+                            'content': {
+                                'type': 'messages_seen',
+                                'room_id': room.id,
+                                'user_id': user.id, # Who saw it
+                                'messages': [m.id for m in msgs_to_update]
+                            }
+                        }
+                    )
     except Room.DoesNotExist:
         pass
     except Exception as e:
@@ -142,35 +199,53 @@ def send_message(
         duration_seconds=duration_seconds,
     )
     
-    # Notify Receiver in Real-Time (Chat Channel)
+    # Notify Participants in Real-Time (Chat Channel)
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
     from ...serializers import MessageSerializer
     channel_layer = get_channel_layer()
     if channel_layer:
-        async_to_sync(channel_layer.group_send)(
-            f'chat_{other_user.id}',
-            {
-                'type': 'send_message',
-                'content': {
-                    'type': 'new_message',
-                    'message': MessageSerializer(msg).data
-                }
-            }
-        )
+        targets = []
+        if room.is_group:
+            targets = [m.user_id for m in room.members.all()]
+        else:
+            other_user = room.receiver if room.caller == sender else room.caller
+            targets = [other_user.id]
+
+        for u_id in targets:
+            if u_id != sender.id:
+                async_to_sync(channel_layer.group_send)(
+                    f'chat_{u_id}',
+                    {
+                        'type': 'send_message',
+                        'content': {
+                            'type': 'new_message',
+                            'message': MessageSerializer(msg).data
+                        }
+                    }
+                )
     
-    # Push Notification
+    # Push Notification for Recipients
     from ..notifications.push_service import send_push_notification, _get_user_tokens
-    tokens = _get_user_tokens(other_user.id)
-    if tokens:
-        profile = getattr(sender, 'profile', None)
-        sender_name = profile.display_name if profile else sender.username
-        send_push_notification(
-            tokens, 
-            title=f"New message from {sender_name}", 
-            body=content[:50] + ("..." if len(content) > 50 else ""),
-            data={'type': 'chat_message', 'sender_id': sender.id}
-        )
+    
+    recipients = []
+    if room.is_group:
+        recipients = [m.user for m in room.members.all().exclude(user=sender)]
+    else:
+        recipients = [room.receiver if room.caller == sender else room.caller]
+
+    for recipient in recipients:
+        tokens = _get_user_tokens(recipient.id)
+        if tokens:
+            profile = getattr(sender, 'profile', None)
+            sender_name = profile.display_name if profile else sender.username
+            title = f"{sender_name} in {room.name}" if room.is_group else f"New message from {sender_name}"
+            send_push_notification(
+                tokens, 
+                title=title, 
+                body=content[:50] + ("..." if len(content) > 50 else ""),
+                data={'type': 'chat_message', 'sender_id': sender.id, 'room_id': room.id}
+            )
         
     return msg
 
@@ -271,9 +346,14 @@ def update_room_theme(room_id: int, chat_theme: str):
         from asgiref.sync import async_to_sync
         channel_layer = get_channel_layer()
         if channel_layer:
-            # Notify both
-            participants = [room.caller_id, room.receiver_id]
-            for u_id in participants:
+            # Get all participants
+            targets = []
+            if room.is_group:
+                targets = [m.user_id for m in room.members.all()]
+            else:
+                targets = [room.caller_id, room.receiver_id]
+
+            for u_id in targets:
                 async_to_sync(channel_layer.group_send)(
                     f'chat_{u_id}',
                     {

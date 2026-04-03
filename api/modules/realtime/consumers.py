@@ -62,8 +62,28 @@ class NotificationConsumer(BaseRealtimeConsumer):
         """Handler for 'send_notification' group messages"""
         await self.send(text_data=json.dumps(event['content']))
 
+    async def group_call_alert(self, event):
+        """Specific handler for incoming group calls"""
+        await self.send(text_data=json.dumps({
+            'type': 'incoming_group_call',
+            'room_id': event['room_id'],
+            'caller_name': event['caller_name'],
+            'call_type': event['call_type']
+        }))
+
 class ChatConsumer(BaseRealtimeConsumer):
     channel_type = "chat"
+
+    @database_sync_to_async
+    def get_room_participants(self, room_id):
+        from api.models import Room, RoomMember
+        try:
+            room = Room.objects.get(id=room_id)
+            if room.is_group:
+                return list(RoomMember.objects.filter(room=room).values_list('user_id', flat=True))
+            return [room.caller_id, room.receiver_id]
+        except Room.DoesNotExist:
+            return []
 
     async def handle_custom_event(self, data):
         # Handle typing indicators etc.
@@ -73,21 +93,22 @@ class ChatConsumer(BaseRealtimeConsumer):
             if not room_id:
                 return
 
-            # Lookup room to find the other user
-            other_user_id = await self.get_other_user_in_room(room_id)
-            if other_user_id:
-                await self.channel_layer.group_send(
-                    f'chat_{other_user_id}',
-                    {
-                        'type': 'send_message',
-                        'content': {
-                            'type': 'typing_status',
-                            'room_id': room_id,
-                            'from_user_id': self.user_id,
-                            'is_typing': is_typing
+            # Lookup room participants
+            participants = await self.get_room_participants(room_id)
+            for u_id in participants:
+                if str(u_id) != str(self.user_id):
+                    await self.channel_layer.group_send(
+                        f'chat_{u_id}',
+                        {
+                            'type': 'send_message',
+                            'content': {
+                                'type': 'typing_status',
+                                'room_id': room_id,
+                                'from_user_id': self.user_id,
+                                'is_typing': is_typing
+                            }
                         }
-                    }
-                )
+                    )
         
         elif data.get('type') == 'update_theme':
             room_id = data.get('room_id')
@@ -97,36 +118,70 @@ class ChatConsumer(BaseRealtimeConsumer):
             # Sync to DB
             await self.update_room_theme(room_id, theme)
 
-            # Relay to other user
-            other_user_id = await self.get_other_user_in_room(room_id)
-            if other_user_id:
-                await self.channel_layer.group_send(
-                    f'chat_{other_user_id}',
-                    {
-                        'type': 'send_message',
-                        'content': {
-                            'type': 'theme_updated',
-                            'room_id': room_id,
-                            'theme': theme
+            # Relay to all participants
+            participants = await self.get_room_participants(room_id)
+            for u_id in participants:
+                if str(u_id) != str(self.user_id):
+                    await self.channel_layer.group_send(
+                        f'chat_{u_id}',
+                        {
+                            'type': 'send_message',
+                            'content': {
+                                'type': 'theme_updated',
+                                'room_id': room_id,
+                                'theme': theme
+                            }
                         }
-                    }
-                )
+                    )
+
+        elif data.get('type') == 'message_reaction':
+            room_id = data.get('room_id')
+            message_id = data.get('message_id')
+            emoji = data.get('emoji')
+            if not room_id or not message_id: return
+
+            # Relay to all participants
+            participants = await self.get_room_participants(room_id)
+            for u_id in participants:
+                if str(u_id) != str(self.user_id):
+                    await self.channel_layer.group_send(
+                        f'chat_{u_id}',
+                        {
+                            'type': 'send_message',
+                            'content': {
+                                'type': 'reaction_updated',
+                                'message_id': message_id,
+                                'room_id': room_id,
+                                'user_id': self.user_id,
+                                'emoji': emoji
+                            }
+                        }
+                    )
+        
+        elif data.get('type') == 'mark_seen':
+            room_id = data.get('room_id')
+            if not room_id: return
+            
+            # Relay to all participants
+            participants = await self.get_room_participants(room_id)
+            for u_id in participants:
+                if str(u_id) != str(self.user_id):
+                    await self.channel_layer.group_send(
+                        f'chat_{u_id}',
+                        {
+                            'type': 'send_message',
+                            'content': {
+                                'type': 'messages_seen',
+                                'room_id': room_id,
+                                'user_id': self.user_id
+                            }
+                        }
+                    )
 
     @database_sync_to_async
     def update_room_theme(self, room_id, theme):
         from api.models import Room
         Room.objects.filter(id=room_id).update(chat_theme=theme)
-
-    @database_sync_to_async
-    def get_other_user_in_room(self, room_id):
-        from api.models import Room
-        try:
-            room = Room.objects.get(id=room_id)
-            if str(room.caller_id) == str(self.user_id):
-                return room.receiver_id
-            return room.caller_id
-        except Room.DoesNotExist:
-            return None
 
     async def send_message(self, event):
         """Handler for 'send_message' group messages"""

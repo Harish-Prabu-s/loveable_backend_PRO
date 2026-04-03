@@ -1,33 +1,27 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from datetime import timedelta
 from api.models import Streak
 
 class Command(BaseCommand):
-    help = 'Resets or freezes streaks that have expired (more than 24h since last interaction)'
+    help = 'Resets streaks that haven\'t seen an upload in over 24 hours'
 
-    def handle(self, *args, **kwargs):
+    def handle(self, *args, **options):
         now = timezone.now()
-        streaks = Streak.objects.filter(streak_count__gte=1)
+        threshold = now - timedelta(hours=24)
         
-        expired_count = 0
-        frozen_count = 0
+        # Identify streaks where last interaction is older than 24h
+        streaks_to_reset = Streak.objects.filter(
+            last_interaction_date__lt=threshold,
+            streak_count__gt=0
+        )
         
-        for streak in streaks:
-            if streak.last_interaction_date:
-                delta = now - streak.last_interaction_date
-                
-                # Check if missed a full calendar day
-                if delta.days > 0 and now.date() > streak.last_interaction_date.date():
-                    if streak.freezes_available > 0:
-                        streak.freezes_available -= 1
-                        streak.last_interaction_date = now # bump date to avoid infinite freezing
-                        streak.save()
-                        frozen_count += 1
-                        self.stdout.write(f"Froze streak for System Users {streak.user1.id} <-> {streak.user2.id}. Freezes left: {streak.freezes_available}")
-                    else:
-                        streak.streak_count = 0
-                        streak.save()
-                        expired_count += 1
-                        self.stdout.write(f"Reset streak for System Users {streak.user1.id} <-> {streak.user2.id}")
-                        
-        self.stdout.write(self.style.SUCCESS(f'Successfully processed streaks. Expired: {expired_count}, Frozen: {frozen_count}'))
+        count = streaks_to_reset.count()
+        
+        # Update them
+        streaks_to_reset.update(
+            streak_count=0,
+            last_uploader=None
+        )
+        
+        self.stdout.write(self.style.SUCCESS(f'Successfully reset {count} streaks.'))

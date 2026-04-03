@@ -345,6 +345,9 @@ def get_streaks_list_service(user: User, view_type: str = 'friends', request=Non
                         'created_at': up.created_at
                     })
 
+                if not media_list:
+                    continue
+
                 result.append({
                     'user_id': other_user.id,
                     'username': other_user.username,
