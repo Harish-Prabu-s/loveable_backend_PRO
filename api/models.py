@@ -530,6 +530,7 @@ class MatchmakingQueue(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='match_queue_entry')
     mode = models.CharField(max_length=20, default='2p') # 2p, 4p
     gender = models.CharField(max_length=1) # M, F, O
+    game_type = models.CharField(max_length=50, default='all') # truth_or_dare, ludo, card, spin
     joined_at = models.DateTimeField(auto_now_add=True)
     
 class GameRoom(models.Model):
@@ -538,9 +539,21 @@ class GameRoom(models.Model):
         ('group', 'Group'),
         ('random', 'Random'),
     )
+    MODE_CHOICES = (
+        ('truth_dare', 'Truth or Dare'),
+        ('romantic', 'Romantic Connection'),
+        ('deep', 'Deep Questions'),
+        ('flirty', 'Flirty Challenge'),
+        ('roleplay', 'Roleplay Lite'),
+        ('memory', 'Memory Meter'),
+        ('draw_guess', 'Draw & Guess'),
+        ('coop', 'Co-op Task'),
+        ('random_match', 'Random Match'),
+    )
     host = models.ForeignKey(User, on_delete=models.CASCADE, related_name='hosted_games', null=True, blank=True)
     room_code = models.CharField(max_length=10, unique=True, null=True, blank=True)
     room_type = models.CharField(max_length=20, choices=ROOM_TYPE_CHOICES, default='group')
+    game_mode = models.CharField(max_length=20, choices=MODE_CHOICES, default='truth_dare')
     status = models.CharField(max_length=20, default='lobby') # lobby, waiting, in_progress, ended
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -559,6 +572,8 @@ class InteractiveGameSession(models.Model):
     current_questioner_player = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='active_questions')
     timer_started_at = models.DateTimeField(null=True, blank=True)
     selected_option = models.CharField(max_length=10, null=True, blank=True) # 'truth' or 'dare'
+    turn_history = models.JSONField(default=list, blank=True)
+
     
 class PlayerState(models.Model):
     session = models.ForeignKey(InteractiveGameSession, on_delete=models.CASCADE, related_name='players')
@@ -573,3 +588,22 @@ class GameEventLog(models.Model):
     event_type = models.CharField(max_length=50) # PlayerJoined, GameStarted, TurnAssigned, VoteCast, etc
     payload = models.JSONField(default=dict)
     timestamp = models.DateTimeField(auto_now_add=True)
+
+class MatchmakingLog(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    mode = models.CharField(max_length=50) # e.g. truth_or_dare_2p
+    status = models.CharField(max_length=20) # searched, matched, cancelled, timeout
+    is_expanded = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class UserRelationship(models.Model):
+    user_one = models.ForeignKey(User, on_delete=models.CASCADE, related_name='relationships_initiated')
+    user_two = models.ForeignKey(User, on_delete=models.CASCADE, related_name='relationships_accepted')
+    closeness_score = models.IntegerField(default=0)
+    streak_count = models.IntegerField(default=0)
+    last_interaction = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user_one', 'user_two')
+
+
