@@ -73,14 +73,12 @@ def get_call_time_leaderboard_service(call_type: str, limit: int = 50, month: in
     month = month or now.month
     year = year or now.year
 
-    call_q = Q(duration_seconds__gt=0, started_at__month=month, started_at__year=year)
+    q_made = Q(calls_made__duration_seconds__gt=0, calls_made__started_at__month=month, calls_made__started_at__year=year)
+    q_received = Q(calls_received__duration_seconds__gt=0, calls_received__started_at__month=month, calls_received__started_at__year=year)
+    
     if call_type.upper() != 'ALL':
-        call_q &= Q(call_type=call_type.upper())
-
-    # Sum duration from both calls_made and calls_received roles.
-    # Note: We filter the specific relations calls_made and calls_received with the monthly constraints.
-    q_made = call_q
-    q_received = call_q
+        q_made &= Q(calls_made__call_type=call_type.upper())
+        q_received &= Q(calls_received__call_type=call_type.upper())
 
     return User.objects.filter(is_active=True).annotate(
         total_made=Sum('calls_made__duration_seconds', filter=q_made),
