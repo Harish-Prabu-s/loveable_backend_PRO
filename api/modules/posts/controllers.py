@@ -34,6 +34,14 @@ def _serialize_post(post, request_user, request=None):
         'is_liked': is_liked,
         'is_owner': post.user == request_user,
         'created_at': post.created_at.isoformat(),
+        'reposted_from': post.reposted_from_id,
+        'parent_user': {
+            'id': post.reposted_from.user.id,
+            'user_id': post.reposted_from.user.id,
+            'username': post.reposted_from.user.username,
+            'display_name': getattr(post.reposted_from.user, 'profile', post.reposted_from.user).display_name if hasattr(post.reposted_from.user, 'profile') else post.reposted_from.user.username,
+            'photo': get_absolute_media_url(post.reposted_from.user.profile.photo, request) if hasattr(post.reposted_from.user, 'profile') and post.reposted_from.user.profile.photo else None,
+        } if post.reposted_from else None,
         'mentioned_users': [{
             'id': u.id,
             'username': u.username,
@@ -159,3 +167,12 @@ def delete_post_view(request, post_id: int):
     if not deleted:
         return Response({'error': 'post not found or permission denied'}, status=404)
     return Response(status=204)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def repost_view(request, post_id: int):
+    from .services import repost_post
+    post = repost_post(request.user, post_id)
+    if not post:
+        return Response({'error': 'post not found'}, status=404)
+    return Response(_serialize_post(post, request.user, request), status=201)

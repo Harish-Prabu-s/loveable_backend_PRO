@@ -59,3 +59,22 @@ def record_view(story_id: int, user):
 
 def get_story_views(story_id: int):
     return StoryView.objects.filter(story_id=story_id).select_related('viewer__profile').order_by('-viewed_at')
+
+def repost_story(user, original_story_id):
+    """Create a repost of an existing story."""
+    try:
+        original = Story.objects.get(id=original_story_id)
+        # Inherit media and caption, but set new owner and expires_at (24h from now)
+        expires_at = timezone.now() + timedelta(hours=24)
+        repost = Story.objects.create(
+            user=user,
+            media_url=original.media_url,
+            media_type=original.media_type,
+            caption=original.caption,
+            expires_at=expires_at,
+            visibility='all',
+            reposted_from=original
+        )
+        return repost
+    except Story.DoesNotExist:
+        return None

@@ -188,3 +188,12 @@ def delete_story_view(request, story_id: int):
         return Response(status=204)
     except Story.DoesNotExist:
         return Response({'error': 'story not found'}, status=404)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def repost_story_view(request, story_id: int):
+    from .services import repost_story
+    story = repost_story(request.user, story_id)
+    if not story:
+        return Response({'error': 'story not found'}, status=404)
+    return Response(StorySerializer(story, context={'request': request}).data, status=201)

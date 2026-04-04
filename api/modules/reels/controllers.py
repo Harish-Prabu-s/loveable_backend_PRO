@@ -206,3 +206,12 @@ def delete_reel_view(request, pk: int):
     if 'error' in result:
         return Response({'error': result['error']}, status=result['status'])
     return Response(status=204)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def repost_reel_view(request, pk: int):
+    from .services import repost_reel
+    reel = repost_reel(request.user, pk)
+    if not reel:
+        return Response({'error': 'reel not found'}, status=404)
+    return Response(ReelSerializer(reel, context={'request': request}).data, status=201)

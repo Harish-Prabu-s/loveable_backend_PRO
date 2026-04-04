@@ -187,9 +187,12 @@ class StorySerializer(serializers.ModelSerializer):
     is_owner = serializers.SerializerMethodField()
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
 
+    reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
+    parent_user = SimpleUserSerializer(source='reposted_from.user', read_only=True)
+
     class Meta:
         model = Story
-        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users']
+        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user']
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -239,9 +242,12 @@ class ReelSerializer(serializers.ModelSerializer):
     is_owner = serializers.SerializerMethodField()
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
 
+    reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
+    parent_user = SimpleUserSerializer(source='reposted_from.user', read_only=True)
+
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_avatar', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users']
+        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_avatar', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user']
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -326,9 +332,11 @@ class PostSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'profile_id', 'display_name', 'username', 'photo', 'gender',
             'caption', 'image', 'likes_count', 'comments_count', 'is_liked', 'is_owner',
-            'created_at', 'mentioned_users'
+            'created_at', 'mentioned_users', 'reposted_from', 'parent_user'
         ]
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
+    reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
+    parent_user = SimpleUserSerializer(source='reposted_from.user', read_only=True)
 
     def get_photo(self, obj):
         request = self.context.get('request')

@@ -12,7 +12,8 @@ urlpatterns = [
     path('<int:story_id>/view/', view_story_view),
     path('<int:story_id>/views/', list_story_views_view),
     path('<int:story_id>/like/', like_story_view),
-    path('<int:story_id>/comment/', list_story_comments_view),
+    path('<int:story_id>/comment/', comment_story_view),
     path('<int:story_id>/comments/', list_story_comments_view), # Robust plural support
+    path('<int:story_id>/repost/', repost_story_view),
     path('<int:story_id>/delete/', delete_story_view),
 ]

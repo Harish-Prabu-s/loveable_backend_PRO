@@ -204,3 +204,18 @@ def share_post(post_id: int, user, target_user_id: int, request=None):
         return True
     except (Post.DoesNotExist, User.DoesNotExist):
         return False
+
+def repost_post(user, original_post_id):
+    """Create a repost of an existing post."""
+    try:
+        original = Post.objects.get(id=original_post_id)
+        repost = Post.objects.create(
+            user=user,
+            caption=original.caption,
+            image=original.image,
+            visibility='all',
+            reposted_from=original
+        )
+        return repost
+    except Post.DoesNotExist:
+        return None

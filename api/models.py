@@ -9,6 +9,7 @@ class Post(models.Model):
     image = models.ImageField(upload_to='posts/', null=True, blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_posts', blank=True)
+    reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -366,6 +367,7 @@ class StreakUpload(models.Model):
     caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_streaks', blank=True)
+    reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     created_at = models.DateTimeField(auto_now_add=True)
 
 class StreakComment(models.Model):
@@ -451,6 +453,7 @@ class Story(models.Model):
     caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_stories', blank=True)
+    reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     created_at = models.DateTimeField(default=timezone.now)
     expires_at = models.DateTimeField(null=True, blank=True)
 
@@ -471,6 +474,7 @@ class Reel(models.Model):
     caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_reels', blank=True)
+    reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 

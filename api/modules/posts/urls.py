@@ -13,5 +13,6 @@ urlpatterns = [
     # Robustness: ensure POST to either works
     path('<int:post_id>/comment/add/', comment_view),
     path('<int:post_id>/share/', share_post_view),
+    path('<int:post_id>/repost/', repost_view),
     path('<int:post_id>/', delete_post_view),
 ]
