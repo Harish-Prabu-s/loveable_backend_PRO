@@ -10,6 +10,19 @@ from api.models import GameRoom, InteractiveGameSession, PlayerState, Profile
 # Initialize Redis client
 redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
 
+class MatchmakingQueueService:
+    @staticmethod
+    def add_user(user_id, mode, gender, game_type, expanded=False):
+        try:
+            user = User.objects.get(id=user_id)
+            return matchmake_user_redis(user, mode, game_type)
+        except User.DoesNotExist:
+            return None
+
+    @staticmethod
+    def remove_user(user_id):
+        return leave_matchmaking_redis(user_id)
+
 def get_matchmaking_key(mode, gender, game_type):
     return f"matchmaking:{mode}:{gender}:{game_type}"
 
