@@ -53,13 +53,15 @@ def create_reel_view(request):
     video_url = request.data.get('video_url')
     caption = request.data.get('caption', '')
     visibility = request.data.get('visibility', 'all')
-    if not video_url:
-        return Response({'error': 'video_url required'}, status=400)
-    
-    # Ensure we store relative path in DB
-    relative_video_path = strip_base_url(video_url)
-    
-    reel = create_reel(request.user, relative_video_path, caption, visibility)
+    mentions = request.data.get('mentions', [])
+    if isinstance(mentions, str):
+        try:
+            import json
+            mentions = json.loads(mentions)
+        except:
+            mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
+            
+    reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions)
     return Response(ReelSerializer(reel, context={'request': request}).data, status=201)
 
 @api_view(['POST'])

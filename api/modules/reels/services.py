@@ -28,14 +28,14 @@ def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False):
         
     return qs
 
-def create_reel(user, video_url: str, caption: str = '', visibility='all'):
+def create_reel(user, video_url: str, caption: str = '', visibility='all', mentions=None):
     reel = Reel.objects.create(user=user, video_url=video_url, caption=caption, visibility=visibility)
     
-    # Notify Close Friends
+    # Notify Close Friends, process mentions
     from ..notifications.services import notify_close_friends_of_content
     from ..notifications.utils import handle_mentions
     notify_close_friends_of_content(user, 'reel', reel.id)
-    handle_mentions(caption, user, 'reel', reel.id, obj=reel)
+    handle_mentions(caption, user, 'reel', reel.id, obj=reel, explicit_mentions=mentions)
     
     return reel
 

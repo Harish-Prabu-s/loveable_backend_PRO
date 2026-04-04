@@ -29,7 +29,15 @@ def create_story_view(request):
     # Ensure we store relative path in DB
     relative_media_path = strip_base_url(media_url)
     
-    story = create_story(request.user, relative_media_path, media_type, visibility, caption)
+    mentions = request.data.get('mentions', [])
+    if isinstance(mentions, str):
+        try:
+            import json
+            mentions = json.loads(mentions)
+        except:
+            mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
+            
+    story = create_story(request.user, relative_media_path, media_type, visibility, caption, mentions=mentions)
     return Response(StorySerializer(story, context={'request': request}).data, status=201)
 
 from rest_framework.parsers import MultiPartParser, FormParser

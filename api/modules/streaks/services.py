@@ -38,7 +38,7 @@ def get_user_streaks_service(user: User, request=None):
         })
     return result
 
-def upload_streak_service(user: User, media, media_type, visibility, caption: str = ''):
+def upload_streak_service(user: User, media, media_type, visibility, caption: str = '', mentions=None):
     upload = StreakUpload.objects.create(
         user=user,
         media_url=media,
@@ -57,9 +57,9 @@ def upload_streak_service(user: User, media, media_type, visibility, caption: st
 
     now = timezone.now()
     
-    # Process Mentions
+    # Process Mentions (both parsed and explicit)
     from ..notifications.utils import handle_mentions
-    handle_mentions(caption, user, 'streak', upload.id, obj=upload)
+    handle_mentions(caption, user, 'streak', upload.id, obj=upload, explicit_mentions=mentions)
 
     for friend_id in mutuals:
         # Get or create streak between user and friend

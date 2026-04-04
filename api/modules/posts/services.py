@@ -34,8 +34,8 @@ import base64
 import re
 import uuid
 
-def create_post(user, caption: str, image=None, visibility='all'):
-    """Create and return a new post, optionally saving an uploaded image file."""
+def create_post(user, caption: str, image=None, visibility='all', mentions=None):
+    """Create and return a new post, optionally saving an uploaded image file and processing mentions."""
     post = Post(user=user, caption=caption, visibility=visibility)
     if image:
         if isinstance(image, str):
@@ -54,17 +54,18 @@ def create_post(user, caption: str, image=None, visibility='all'):
                     print(f"Error decoding base64 image: {e}")
             else:
                 print("Image string did not match expected base64 format.")
+                
         else:
             filename = f"posts/{user.id}_{image.name}"
             path = default_storage.save(filename, ContentFile(image.read()))
             post.image = path
     post.save()
     
-    # Notify Close Friends
+    # Notify Close Friends, process mentions (both parsed and explicit)
     from ..notifications.services import notify_close_friends_of_content
     from ..notifications.utils import handle_mentions
     notify_close_friends_of_content(user, 'post', post.id)
-    handle_mentions(caption, user, 'post', post.id, obj=post)
+    handle_mentions(caption, user, 'post', post.id, obj=post, explicit_mentions=mentions)
     
     return post
 

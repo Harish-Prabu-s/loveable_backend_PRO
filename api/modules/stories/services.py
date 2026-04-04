@@ -16,7 +16,7 @@ def get_active_stories(user):
         (models.Q(visibility='close_friends') & models.Q(user__close_friends__close_friend=user))
     ).select_related('user__profile').prefetch_related('views').order_by('-created_at').distinct()
 
-def create_story(user, media_url: str, media_type: str = 'image', visibility='all', caption: str = ''):
+def create_story(user, media_url: str, media_type: str = 'image', visibility='all', caption: str = '', mentions=None):
     expires_at = timezone.now() + timedelta(hours=24)
     story = Story.objects.create(
         user=user, 
@@ -27,11 +27,11 @@ def create_story(user, media_url: str, media_type: str = 'image', visibility='al
         caption=caption
     )
     
-    # Notify Close Friends
+    # Notify Close Friends, process mentions
     from ..notifications.services import notify_close_friends_of_content
     from ..notifications.utils import handle_mentions
     notify_close_friends_of_content(user, 'story', story.id)
-    handle_mentions(caption, user, 'story', story.id, obj=story)
+    handle_mentions(caption, user, 'story', story.id, obj=story, explicit_mentions=mentions)
     
     return story
 

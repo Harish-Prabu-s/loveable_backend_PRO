@@ -80,7 +80,15 @@ def create_post_view(request):
             return Response({'error': 'caption or image required', 'debug_files': list(request.FILES.keys()), 'debug_data': list(request.data.keys())}, status=400)
 
         visibility = request.data.get('visibility', 'all')
-        post = create_post(request.user, caption, image, visibility)
+        mentions = request.data.get('mentions', [])
+        if isinstance(mentions, str):
+            try:
+                import json
+                mentions = json.loads(mentions)
+            except:
+                mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
+        
+        post = create_post(request.user, caption, image, visibility, mentions=mentions)
         return Response(_serialize_post(post, request.user, request), status=201)
     except Exception as e:
         import traceback

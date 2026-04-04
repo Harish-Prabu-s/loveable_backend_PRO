@@ -11,35 +11,52 @@ def parse_mentions(text):
     # Find @ followed by alphanumeric and underscore, at least 3 chars
     return re.findall(r'@([a-zA-Z0-9_]{3,})', text)
 
-def handle_mentions(text, actor, content_type, object_id, request=None, obj=None):
+def handle_mentions(text, actor, content_type, object_id, request=None, obj=None, explicit_mentions=None):
     """
-    Process mentions in text:
+    Process mentions in text and explicit mentions list:
     - Populates the 'mentions' M2M field if obj is provided
-    - Creates Notifications
+    - Creates Notifications for all mentioned users
     - Sends Push Notifications
     - Sends a chat message alert with a shareable link/object
     """
     usernames = parse_mentions(text)
-    if not usernames:
+    
+    # Fetch explicit mention users
+    explicit_users = []
+    if explicit_mentions:
+        explicit_users = list(User.objects.filter(id__in=explicit_mentions))
+
+    if not usernames and not explicit_users:
         return
 
-    # Remove duplicates and actor's own username
+    # Filter out duplicates and actor's own username from parsed list
     usernames = list(set(usernames))
     if actor.username in usernames:
         usernames.remove(actor.username)
 
-    mentioned_users = User.objects.filter(username__in=usernames)
+    # Combine parsed users with explicit users
+    mentioned_users = list(User.objects.filter(username__in=usernames))
     
+    # Merge using a set to avoid duplicates
+    user_pool = {u.id: u for u in mentioned_users + explicit_users}
+    if actor.id in user_pool:
+        del user_pool[actor.id]
+    
+    final_users = list(user_pool.values())
+    
+    if not final_users:
+        return
+
     # Update M2M field if object is provided (for Post, Reel, Story, Streak)
     if obj and hasattr(obj, 'mentions'):
-        obj.mentions.set(mentioned_users)
+        obj.mentions.set(final_users)
 
     profile = getattr(actor, 'profile', None)
     sender_name = profile.display_name if profile else actor.username
 
     content_label = content_type.replace('_', ' ')
     
-    for target_user in mentioned_users:
+    for target_user in final_users:
         # 1. Database Notification
         notif_type = f"mention_{content_type}"
         create_notification(
