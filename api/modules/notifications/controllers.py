@@ -115,11 +115,13 @@ def register_push_token(request):
     if not expo_token:
         return Response({'error': 'Token is required'}, status=400)
 
-    # Legacy store (optional, but keep for compatibility if needed)
+    # Legacy store (one token record per user)
     PushToken.objects.update_or_create(
         user=request.user,
-        expo_token=expo_token,
-        defaults={'device': device},
+        defaults={
+            'expo_token': expo_token,
+            'device': device
+        },
     )
     
     # Store in Profile as requested

@@ -72,7 +72,7 @@ class EmailOTP(models.Model):
 
 class PushToken(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='push_tokens')
-    expo_token = models.CharField(max_length=255, unique=True)
+    expo_token = models.CharField(max_length=255)
     device = models.CharField(max_length=50, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
