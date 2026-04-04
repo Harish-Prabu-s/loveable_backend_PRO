@@ -14,6 +14,7 @@ cffi==2.0.0
 channels==3.0.5
 channels-redis>=4.2.0
 chardet==5.2.0
+redis==5.0.1
 charset-normalizer==3.4.4
 constantly==23.10.4
 cryptography==46.0.3
