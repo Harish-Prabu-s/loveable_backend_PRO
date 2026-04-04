@@ -119,6 +119,11 @@ class LeagueStats(models.Model):
     total_money_earned = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     total_calls_received = models.IntegerField(default=0)
     total_call_seconds = models.IntegerField(default=0)
+    total_video_seconds = models.IntegerField(default=0)
+    total_audio_seconds = models.IntegerField(default=0)
+    monthly_video_seconds = models.IntegerField(default=0)
+    monthly_audio_seconds = models.IntegerField(default=0)
+    last_reset_month = models.IntegerField(default=0)
     longest_call_seconds = models.IntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
 

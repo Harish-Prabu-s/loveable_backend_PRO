@@ -106,13 +106,32 @@ def end_call(session: CallSession) -> dict:
     except Wallet.DoesNotExist:
         pass
 
-    # Update league stats for callee (calls received)
-    stats, _ = LeagueStats.objects.get_or_create(user=session.callee)
-    stats.total_calls_received += 1
-    stats.total_call_seconds += duration_s
-    if duration_s > stats.longest_call_seconds:
-        stats.longest_call_seconds = duration_s
-    stats.save(update_fields=['total_calls_received', 'total_call_seconds', 'longest_call_seconds', 'updated_at'])
+    # Update league stats for both participants
+    current_month = now.month
+    for user in [session.caller, session.callee]:
+        stats, created = LeagueStats.objects.get_or_create(user=user)
+        
+        # Monthly Reset Logic
+        if stats.last_reset_month != current_month:
+            stats.monthly_video_seconds = 0
+            stats.monthly_audio_seconds = 0
+            stats.last_reset_month = current_month
+        
+        # Total Stats
+        stats.total_call_seconds += duration_s
+        if session.call_type == 'VIDEO':
+            stats.total_video_seconds += duration_s
+            stats.monthly_video_seconds += duration_s
+        else:
+            stats.total_audio_seconds += duration_s
+            stats.monthly_audio_seconds += duration_s
+            
+        if user == session.callee:
+            stats.total_calls_received += 1
+            if duration_s > stats.longest_call_seconds:
+                stats.longest_call_seconds = duration_s
+        
+        stats.save()
 
     # Mark callee as not busy
     session.callee.profile.is_busy = False

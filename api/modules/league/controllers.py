@@ -7,7 +7,9 @@ from django.contrib.auth.models import User
 RANK_FIELD_MAP = {
     'coins':            '-total_coins_earned',
     'money':            '-total_money_earned',
-    'call_duration':    '-total_call_seconds',
+    'video_duration':   '-monthly_video_seconds',
+    'audio_duration':   '-monthly_audio_seconds',
+    'total_duration':   '-total_call_seconds',
     'calls_received':   '-total_calls_received',
     'time_spent':       '-total_time_seconds',
     'bet_wins':         '-bet_match_wins',
@@ -19,7 +21,7 @@ def _serialize_entry(stats, rank):
     try:
         profile = user.profile
         display_name = profile.display_name
-        photo = str(profile.photo) if profile.photo else None
+        photo = profile.photo.url if profile.photo else None
         gender = profile.gender
         is_online = profile.is_online
     except Exception:
@@ -37,6 +39,8 @@ def _serialize_entry(stats, rank):
         'total_coins_earned': stats.total_coins_earned,
         'total_money_earned': str(stats.total_money_earned),
         'total_call_seconds': stats.total_call_seconds,
+        'monthly_video_seconds': stats.monthly_video_seconds,
+        'monthly_audio_seconds': stats.monthly_audio_seconds,
         'total_calls_received': stats.total_calls_received,
         'total_time_seconds': stats.total_time_seconds,
         'bet_match_wins':     stats.bet_match_wins,
