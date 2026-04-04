@@ -303,7 +303,7 @@ class ContactSerializer(serializers.Serializer):
     def get_photo(self, obj):
         request = self.context.get('request')
         if getattr(obj, 'is_group', False):
-            return getattr(obj, 'group_avatar', None)
+            return get_absolute_media_url(getattr(obj, 'group_avatar', None), request)
         profile = getattr(obj, 'profile', None)
         if profile:
             return get_absolute_media_url(profile.photo, request)

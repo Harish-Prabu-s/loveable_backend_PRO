@@ -28,6 +28,18 @@ def list_notifications(request):
                 request_status = FollowRequest.objects.get(id=n.object_id).status
             except FollowRequest.DoesNotExist:
                 pass
+        elif n.notification_type == 'friend_request' and n.object_id:
+            from ...models import FriendRequest
+            try:
+                request_status = FriendRequest.objects.get(id=n.object_id).status
+            except FriendRequest.DoesNotExist:
+                pass
+        elif n.notification_type == 'game_invite' and n.object_id:
+            from ...models import GameRoom
+            try:
+                request_status = GameRoom.objects.get(id=n.object_id).status
+            except GameRoom.DoesNotExist:
+                pass
         
         data.append({
             'id': n.id,

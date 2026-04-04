@@ -174,10 +174,9 @@ def contact_list_view(request):
         # 2. Fetch Group Rooms
         group_rooms = Room.objects.filter(is_group=True, is_archived=False, members__user=user) \
             .annotate(
-                unread_count=Count('messages', filter=~Q(messages__sender=user) & ~Q(messages__seen_by__user=user)),
+                unread_count=Count('messages', filter=~Q(messages__sender=user) & ~Q(messages__seen_by_users__user=user)),
                 last_msg_time=Max('messages__created_at')
             ) \
-            .filter(last_msg_time__isnull=False) \
             .prefetch_related(Prefetch('messages', queryset=Message.objects.order_by('-created_at'), to_attr='latest_msgs'))
 
         # Combine and Process

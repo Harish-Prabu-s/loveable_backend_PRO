@@ -21,12 +21,38 @@ def list_profiles_view(request):
     search = request.GET.get('search')
     is_online = request.GET.get('is_online')
     is_busy = request.GET.get('is_busy')
+    relationship = request.GET.get('relationship') # 'friends' for mentions
     
-    # Optimized for user discovery
+    # Base queryset: exclude self
     qs = Profile.objects.exclude(user=request.user).select_related('user')
     
+    if relationship == 'friends':
+        from ...models import Follow, FriendRequest
+        # Get IDs of people the user follows or who follow the user
+        following_ids = Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+        follower_ids = Follow.objects.filter(following=request.user).values_list('follower_id', flat=True)
+        # Get IDs of accepted friends
+        friend_ids = FriendRequest.objects.filter(
+            (models.Q(from_user=request.user) | models.Q(to_user=request.user)),
+            status='accepted'
+        ).values_list('from_user_id', 'to_user_id')
+        
+        # Flatten friend IDs
+        flat_friend_ids = set()
+        for f in friend_ids:
+            flat_friend_ids.add(f[0])
+            flat_friend_ids.add(f[1])
+        
+        # Combined social circle
+        social_ids = set(following_ids) | set(follower_ids) | flat_friend_ids
+        if request.user.id in social_ids:
+            social_ids.remove(request.user.id)
+            
+        qs = qs.filter(user_id__in=social_ids)
+
     if search:
-        qs = qs.filter(display_name__icontains=search)
+        from django.db.models import Q
+        qs = qs.filter(Q(display_name__icontains=search) | Q(username__icontains=search))
     
     if is_online == 'true':
         qs = qs.filter(is_online=True)

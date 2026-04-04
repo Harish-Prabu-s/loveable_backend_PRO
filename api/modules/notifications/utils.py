@@ -17,7 +17,7 @@ def handle_mentions(text, actor, content_type, object_id, request=None, obj=None
     - Populates the 'mentions' M2M field if obj is provided
     - Creates Notifications
     - Sends Push Notifications
-    - Sends a chat message alert
+    - Sends a chat message alert with a shareable link/object
     """
     usernames = parse_mentions(text)
     if not usernames:
@@ -30,7 +30,7 @@ def handle_mentions(text, actor, content_type, object_id, request=None, obj=None
 
     mentioned_users = User.objects.filter(username__in=usernames)
     
-    # Update M2M field if object is provided (for Post, Reel, Story)
+    # Update M2M field if object is provided (for Post, Reel, Story, Streak)
     if obj and hasattr(obj, 'mentions'):
         obj.mentions.set(mentioned_users)
 
@@ -56,12 +56,14 @@ def handle_mentions(text, actor, content_type, object_id, request=None, obj=None
             payload = {
                 'type': 'mention',
                 'mention_type': content_type,
-                'actor_id': actor.id
+                'actor_id': actor.id,
+                'object_id': object_id
             }
             if content_type == 'post': payload['post_id'] = object_id
             elif content_type == 'reel': payload['reel_id'] = object_id
             elif content_type == 'story': payload['story_id'] = object_id
-            elif content_type == 'comment': payload['post_id'] = object_id # Assuming comment mention links to post
+            elif content_type == 'streak': payload['streak_id'] = object_id
+            elif content_type == 'comment': payload['post_id'] = object_id 
             elif content_type == 'reel_comment': payload['reel_id'] = object_id
             elif content_type == 'story_comment': payload['story_id'] = object_id
 
@@ -72,10 +74,28 @@ def handle_mentions(text, actor, content_type, object_id, request=None, obj=None
                 data=payload
             )
 
-        # 3. Chat Alert (Optional but requested: "show in chat")
+        # 3. Chat Alert (Automatic Share)
         try:
-            room = get_or_create_room(actor, target_user.id, 'audio') # Default room
-            alert_msg = f"I mentioned you in a {content_label}! Check it out."
-            send_message(room, actor, alert_msg, 'text')
+            # Get or create room (using 'audio' as default for 1v1)
+            room = get_or_create_room(actor, target_user.id, 'audio')
+            
+            # Map content_type to chat message type and content format
+            share_type = 'text'
+            share_content = f"I mentioned you in a {content_label}! Check it out."
+            
+            if content_type == 'post':
+                share_type = 'post_share'
+                share_content = f"[POST_SHARE:{object_id}]"
+            elif content_type == 'reel':
+                share_type = 'reel_share'
+                share_content = f"[REEL_SHARE:{object_id}]"
+            elif content_type == 'story':
+                share_type = 'story_share'
+                share_content = f"[STORY_SHARE:{object_id}]"
+            elif content_type == 'streak':
+                share_type = 'streak_share'
+                share_content = f"[STREAK_SHARE:{object_id}]"
+            
+            send_message(room.id, actor, share_content, share_type)
         except Exception as e:
             print(f"Error sending mention chat alert: {e}")

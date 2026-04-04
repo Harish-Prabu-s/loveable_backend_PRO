@@ -358,7 +358,9 @@ class StreakUpload(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='streak_uploads')
     media_url = models.FileField(upload_to='streaks/', null=True, blank=True)
     media_type = models.CharField(max_length=10, default='image')
+    caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')
+    mentions = models.ManyToManyField(User, related_name='mentioned_in_streaks', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 class StreakComment(models.Model):

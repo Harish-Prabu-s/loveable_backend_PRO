@@ -1,8 +1,53 @@
-from ...models import Game
+from ...models import Game, Notification
 import random
+from django.contrib.auth.models import User
+from ..notifications.services import create_notification
 
 def list_active_games():
     return Game.objects.filter(is_active=True).order_by('name')
+
+def send_game_invite(sender: User, recipient_id: int, game_id: str):
+    """
+    Sends a game invitation to a specific user.
+    Creates a notification and sends real-time data via WebSockets.
+    """
+    try:
+        recipient = User.objects.get(id=recipient_id)
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        
+        # 1. Create DB Notification
+        msg = f"{sender.username} invited you to play {game_id.replace('_', ' ').title()}!"
+        create_notification(
+            recipient=recipient,
+            actor=sender,
+            notification_type='game_invite',
+            message=msg,
+            object_id=None # Optionally link to a session if pre-created
+        )
+        
+        # 2. Real-time WebSocket Invite
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f'notifications_{recipient.id}',
+                {
+                    'type': 'send_notification',
+                    'content': {
+                        'type': 'game_invite',
+                        'from_user': {
+                            'id': sender.id,
+                            'username': sender.username,
+                            'display_name': getattr(sender.profile, 'display_name', '')
+                        },
+                        'game_id': game_id,
+                        'message': msg
+                    }
+                }
+            )
+        return True
+    except User.DoesNotExist:
+        return False
 
 # Icebreaker prompts
 TRUTH_PROMPTS = [

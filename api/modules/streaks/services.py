@@ -38,12 +38,13 @@ def get_user_streaks_service(user: User, request=None):
         })
     return result
 
-def upload_streak_service(user: User, media, media_type, visibility):
+def upload_streak_service(user: User, media, media_type, visibility, caption: str = ''):
     upload = StreakUpload.objects.create(
         user=user,
         media_url=media,
         media_type=media_type,
-        visibility=visibility
+        visibility=visibility,
+        caption=caption
     )
     
     # Increment streaks for mutual followers.
@@ -56,6 +57,10 @@ def upload_streak_service(user: User, media, media_type, visibility):
 
     now = timezone.now()
     
+    # Process Mentions
+    from ..notifications.utils import handle_mentions
+    handle_mentions(caption, user, 'streak', upload.id, obj=upload)
+
     for friend_id in mutuals:
         # Get or create streak between user and friend
         s = Streak.objects.filter(

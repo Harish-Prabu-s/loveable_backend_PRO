@@ -12,8 +12,9 @@ def upload_streak(request):
     
     media_type = request.data.get('media_type', 'image')
     visibility = request.data.get('visibility', 'all')
+    caption = request.data.get('caption', '').strip()
     
-    upload, msg = upload_streak_service(request.user, media, media_type, visibility)
+    upload, msg = upload_streak_service(request.user, media, media_type, visibility, caption)
     if not upload:
         return Response({'error': msg}, status=400)
     

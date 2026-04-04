@@ -23,11 +23,47 @@ def icebreaker_prompt_view(request, kind: str):
 @permission_classes([IsAuthenticated])
 def matchmake_view(request):
     game_type = request.data.get('game_type', 'truth_or_dare')
+    mode = request.data.get('mode', '2p')
+    
+    from .matchmaking_redis import matchmake_user_redis
     try:
-        result = matchmake_user(request.user, game_type)
+        result = matchmake_user_redis(request.user, mode, game_type)
         return Response(result)
     except Exception as e:
         return Response({'status': 'error', 'message': str(e)}, status=400)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def leave_matchmake_view(request):
+    from .matchmaking_redis import leave_matchmaking_redis
+    result = leave_matchmaking_redis(request.user.id)
+    return Response(result)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_invite_view(request):
+    target_id = request.data.get('target_user_id')
+    game_mode = request.data.get('game_type', 'truth_dare')
+    
+    from .invite_service import send_game_invite
+    result = send_game_invite(request.user, target_id, game_mode)
+    
+    if result['status'] == 'success':
+        return Response(result)
+    return Response(result, status=400)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def respond_invite_view(request):
+    notification_id = request.data.get('notification_id')
+    action = request.data.get('action', 'accept')
+    
+    from .invite_service import respond_game_invite
+    result = respond_game_invite(notification_id, request.user, action)
+    
+    if result['status'] == 'success':
+        return Response(result)
+    return Response(result, status=400)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
