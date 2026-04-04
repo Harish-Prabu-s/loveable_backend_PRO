@@ -63,23 +63,33 @@ def get_streak_leaderboard_service(limit: int = 50):
         )
     ).filter(streak_count__gt=0).select_related('profile').order_by('-streak_count')[:limit]
 
-def get_call_time_leaderboard_service(call_type: str, limit: int = 50):
+def get_call_time_leaderboard_service(call_type: str, limit: int = 50, month: int = None, year: int = None):
     """
     Optimized: Get top users by total call duration in a single query.
-    If call_type is 'ALL', sum Video and Voice.
+    Filters by current month if month/year are provided.
     """
-    # Filter by call_type if not 'ALL'
-    if call_type.upper() == 'ALL':
-        q_made = Q()
-        q_received = Q()
-    else:
-        q_made = Q(calls_made__call_type=call_type.upper())
-        q_received = Q(calls_received__call_type=call_type.upper())
+    # Current month filtering as requested
+    now = timezone.now()
+    month = month or now.month
+    year = year or now.year
+
+    call_q = Q(duration_seconds__gt=0, started_at__month=month, started_at__year=year)
+    if call_type.upper() != 'ALL':
+        call_q &= Q(call_type=call_type.upper())
 
     # Sum duration from both calls_made and calls_received roles.
+    # Note: We filter the specific relations calls_made and calls_received with the monthly constraints.
+    q_made = call_q
+    q_received = call_q
+
     return User.objects.filter(is_active=True).annotate(
         total_made=Sum('calls_made__duration_seconds', filter=q_made),
-        total_received=Sum('calls_received__duration_seconds', filter=q_received)
+        total_received=Sum('calls_received__duration_seconds', filter=q_received),
+        # Breakdown by type if ALL
+        total_made_video=Sum('calls_made__duration_seconds', filter=q_made & Q(calls_made__call_type='VIDEO')),
+        total_received_video=Sum('calls_received__duration_seconds', filter=q_received & Q(calls_received__call_type='VIDEO')),
+        total_made_voice=Sum('calls_made__duration_seconds', filter=q_made & Q(calls_made__call_type='VOICE')),
+        total_received_voice=Sum('calls_received__duration_seconds', filter=q_received & Q(calls_received__call_type='VOICE')),
     ).annotate(
         total_duration=Case(
             When(total_made__isnull=False, total_received__isnull=False, then=F('total_made') + F('total_received')),

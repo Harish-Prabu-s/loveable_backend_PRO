@@ -2,10 +2,18 @@ import logging
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth.models import User
-from .models import Post, PostLike, PostComment, Reel, ReelLike, ReelComment, Story, StoryLike, StoryComment, FollowRequest, FriendRequest, Message, Streak, StreakLike, StreakComment, StreakReaction
+from .models import Profile, LeagueStats, Post, PostLike, PostComment, Reel, ReelLike, ReelComment, Story, StoryLike, StoryComment, FollowRequest, FriendRequest, Message, Streak, StreakLike, StreakComment, StreakReaction
 from .modules.notifications.fcm_service import send_action_notification, notify_followers, notify_streak_update
 
 logger = logging.getLogger(__name__)
+
+# --- User Profiles & Stats ---
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        Profile.objects.get_or_create(user=instance, defaults={'phone_number': instance.username})
+        LeagueStats.objects.get_or_create(user=instance)
 
 # --- Uploads (Notify Followers) ---
 

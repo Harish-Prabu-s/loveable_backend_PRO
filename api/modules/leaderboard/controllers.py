@@ -35,7 +35,9 @@ def video_call_leaderboard_view(request):
             'username': user.username,
             'display_name': p.display_name if p else user.username,
             'profile_pic': p.photo.url if p and p.photo else None,
-            'total_duration': user.total_duration
+            'total_duration': user.total_duration,
+            'total_minutes': int((user.total_duration + 59) / 60),
+            'monthly_video_seconds': user.total_duration
         })
     return Response(data)
 
@@ -52,22 +54,36 @@ def audio_call_leaderboard_view(request):
             'username': user.username,
             'display_name': p.display_name if p else user.username,
             'profile_pic': p.photo.url if p and p.photo else None,
-            'total_duration': user.total_duration
+            'total_duration': user.total_duration,
+            'total_minutes': int((user.total_duration + 59) / 60),
+            'monthly_audio_seconds': user.total_duration
         })
     return Response(data)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def total_call_leaderboard_view(request):
+    # This is the "Top Callers" list
     users = get_call_time_leaderboard_service('ALL')
     data = []
     for i, user in enumerate(users):
         p = getattr(user, 'profile', None)
+        # Handle decimal annotation defaults
+        tmv = getattr(user, 'total_made_video', 0) or 0
+        trv = getattr(user, 'total_received_video', 0) or 0
+        tms = getattr(user, 'total_made_voice', 0) or 0
+        trs = getattr(user, 'total_received_voice', 0) or 0
+        
         data.append({
             'rank': i + 1,
             'user_id': user.id,
             'username': user.username,
             'display_name': p.display_name if p else user.username,
             'profile_pic': p.photo.url if p and p.photo else None,
-            'total_duration': user.total_duration
+            'total_duration': user.total_duration,
+            'total_minutes': int((user.total_duration + 59) / 60),
+            'monthly_video_seconds': int(tmv + trv),
+            'monthly_audio_seconds': int(tms + trs),
         })
     return Response(data)
+
