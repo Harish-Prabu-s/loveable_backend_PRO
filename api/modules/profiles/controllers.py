@@ -1,6 +1,7 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.db.models import Q
 from ...serializers import ProfileSerializer
 from .services import get_my_profile, update_my_profile, follow_user, unfollow_user, send_friend_request, respond_friend_request
 from ...models import Profile
@@ -33,7 +34,7 @@ def list_profiles_view(request):
         follower_ids = Follow.objects.filter(following=request.user).values_list('follower_id', flat=True)
         # Get IDs of accepted friends
         friend_ids = FriendRequest.objects.filter(
-            (models.Q(from_user=request.user) | models.Q(to_user=request.user)),
+            (Q(from_user=request.user) | Q(to_user=request.user)),
             status='accepted'
         ).values_list('from_user_id', 'to_user_id')
         
@@ -51,8 +52,7 @@ def list_profiles_view(request):
         qs = qs.filter(user_id__in=social_ids)
 
     if search:
-        from django.db.models import Q
-        qs = qs.filter(Q(display_name__icontains=search) | Q(username__icontains=search))
+        qs = qs.filter(Q(display_name__icontains=search) | Q(user__username__icontains=search))
     
     if is_online == 'true':
         qs = qs.filter(is_online=True)
