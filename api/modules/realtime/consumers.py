@@ -320,6 +320,7 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
 
             if msg_type in ['call-offer', 'call-answer', 'ice-candidate', 'call-accept', 'call-reject']:
                 if target_id:
+                    logger.info(f"[WS Signaling] Relaying TARGETED {msg_type} from {self.user_id} to {target_id} | Room: {self.room_id}")
                     # Targeted signal to a specific user
                     await self.channel_layer.group_send(
                         self.room_group_name,
@@ -330,6 +331,7 @@ class CallRoomConsumer(AsyncWebsocketConsumer):
                         }
                     )
                 else:
+                    logger.info(f"[WS Signaling] BROADCASTING {msg_type} from {self.user_id} | Room: {self.room_id}")
                     # Broadcast signal (only for specific room-wide events)
                     await self.channel_layer.group_send(
                         self.room_group_name,
