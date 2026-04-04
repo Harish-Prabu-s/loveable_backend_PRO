@@ -1,0 +1,3 @@
+Table Indices:
+Key: PRIMARY, Column: id, Non-Unique: 0
+Key: api_pushtoken_user_id_9c2fdcef, Column: user_id, Non-Unique: 1
