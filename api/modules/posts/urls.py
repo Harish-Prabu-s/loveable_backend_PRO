@@ -1,7 +1,7 @@
 from django.urls import path
 from .controllers import (
     feed_view, create_post_view, like_view, delete_post_view, comment_view,
-    list_comments_view, share_post_view,
+    list_comments_view, share_post_view, repost_view,
 )
 
 urlpatterns = [
