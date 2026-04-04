@@ -93,7 +93,7 @@ def respond_to_follow_request(request_id: int, responding_user: User, action: st
 
 def get_notifications(user: User, unread_only: bool = False):
     """Get notifications for a user, newest first."""
-    qs = Notification.objects.filter(recipient=user).select_related('actor')
+    qs = Notification.objects.filter(recipient=user).select_related('actor').order_by('-created_at')
     if unread_only:
         qs = qs.filter(is_read=False)
     return qs[:100]  # cap at 100

@@ -22,12 +22,20 @@ def list_notifications(request):
     data = []
     for n in notifications:
         actor_profile = getattr(n.actor, 'profile', None)
+        request_status = None
+        if n.notification_type == 'follow_request' and n.object_id:
+            try:
+                request_status = FollowRequest.objects.get(id=n.object_id).status
+            except FollowRequest.DoesNotExist:
+                pass
+        
         data.append({
             'id': n.id,
             'type': n.notification_type,
             'message': n.message,
             'is_read': n.is_read,
             'object_id': n.object_id,
+            'request_status': request_status,
             'created_at': n.created_at,
             'actor': {
                 'id': n.actor.id if n.actor else None,

@@ -157,62 +157,87 @@ def presence_view(request, user_id: int):
 def contact_list_view(request):
     try:
         user = request.user
-        # Efficiently fetch all rooms and their latest message in one go
-        from django.db.models import Prefetch, Count, Case, When, IntegerField
+        from django.db.models import Prefetch, Count, Max
         from ...models import Room, Message, Streak
         
-        # Room qs with unread count annotated
-        rooms = Room.objects.filter(Q(caller=user) | Q(receiver=user)) \
-            .select_related('caller__profile', 'receiver__profile') \
+        # 1. Fetch 1v1 Rooms
+        private_rooms = Room.objects.filter(is_group=False, is_archived=False) \
+            .filter(Q(caller=user) | Q(receiver=user)) \
             .annotate(
                 unread_count=Count('messages', filter=Q(messages__is_seen=False) & ~Q(messages__sender=user)),
                 last_msg_time=Max('messages__created_at')
             ) \
             .filter(last_msg_time__isnull=False) \
-            .prefetch_related(Prefetch('messages', queryset=Message.objects.order_by('-created_at'), to_attr='latest_msgs')) \
-            .order_by('-last_msg_time')
+            .select_related('caller__profile', 'receiver__profile') \
+            .prefetch_related(Prefetch('messages', queryset=Message.objects.order_by('-created_at'), to_attr='latest_msgs'))
 
-        # Prefetch all relevant streaks for these users to avoid N+1 in the loop
-        other_user_ids = [r.receiver_id if r.caller_id == user.id else r.caller_id for r in rooms]
-        
-        streaks = {
-            (min(user.id, s.user1_id, s.user2_id), max(user.id, s.user1_id, s.user2_id)): s
-            for s in Streak.objects.filter(
-                (Q(user1=user) & Q(user2_id__in=other_user_ids)) | 
-                (Q(user2=user) & Q(user1_id__in=other_user_ids))
-            )
-        }
+        # 2. Fetch Group Rooms
+        group_rooms = Room.objects.filter(is_group=True, is_archived=False, members__user=user) \
+            .annotate(
+                unread_count=Count('messages', filter=~Q(messages__sender=user) & ~Q(messages__seen_by__user=user)),
+                last_msg_time=Max('messages__created_at')
+            ) \
+            .filter(last_msg_time__isnull=False) \
+            .prefetch_related(Prefetch('messages', queryset=Message.objects.order_by('-created_at'), to_attr='latest_msgs'))
 
+        # Combine and Process
         contacts_data = []
-        seen_users = set()
+        seen_user_ids = set()
 
-        for room in rooms:
+        # Handle Private Rooms (map to User objects)
+        for room in private_rooms:
             other_user = room.receiver if room.caller == user else room.caller
-            if other_user.id in seen_users:
-                continue
-                
-            last_msg = room.latest_msgs[0] if room.latest_msgs else None
-            if not last_msg:
-                continue
-                
-            seen_users.add(other_user.id)
+            if other_user.id in seen_user_ids: continue
+            seen_user_ids.add(other_user.id)
             
-            # Attach transient data for serializer
+            last_msg = room.latest_msgs[0] if room.latest_msgs else None
+            if not last_msg: continue
+            
+            # Use dot notation for serializer compatibility
+            other_user.is_group = False
+            other_user.room_id = room.id
             other_user.last_message = last_msg.content
             other_user.last_message_type = last_msg.type
             other_user.last_timestamp = last_msg.created_at
             other_user.unread_count = room.unread_count
-
-            # Attach Streak Info from our pre-fetched dictionary
-            u1_id, u2_id = (user.id, other_user.id) if user.id < other_user.id else (other_user.id, user.id)
-            streak = streaks.get((u1_id, u2_id))
             
+            # Streak (Simplified for performance)
+            ot_id = other_user.id
+            u1, u2 = (user.id, ot_id) if user.id < ot_id else (ot_id, user.id)
+            streak = Streak.objects.filter(user1_id=u1, user2_id=u2).first()
             other_user.streak_count = streak.streak_count if streak else 0
-            other_user.streak_last_interaction = streak.last_interaction_date if streak else None
             
             contacts_data.append(other_user)
+
+        # Handle Group Rooms (map to dummy objects)
+        from types import SimpleNamespace
+        for room in group_rooms:
+            last_msg = room.latest_msgs[0] if room.latest_msgs else None
+            
+            group_contact = SimpleNamespace(
+                id=room.id,
+                username=f"group_{room.id}",
+                is_group=True,
+                room_id=room.id,
+                name=room.name,
+                group_avatar=room.group_avatar,
+                last_message=last_msg.content if last_msg else "Start chatting...",
+                last_message_type=last_msg.type if last_msg else "text",
+                last_timestamp=last_msg.created_at if last_msg else room.created_at,
+                unread_count=room.unread_count,
+                streak_count=0
+            )
+            contacts_data.append(group_contact)
+
+        # Final Sort by Last Timestamp
+        contacts_data.sort(key=lambda x: x.last_timestamp if x.last_timestamp else timezone.now(), reverse=True)
             
         return Response(ContactSerializer(contacts_data, many=True, context={'request': request}).data)
+    except Exception as e:
+        import traceback
+        import logging
+        logging.getLogger(__name__).error(f"Error in contact_list_view: {e}\n{traceback.format_exc()}")
+        return Response([])
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Error in contact_list_view: {e}")

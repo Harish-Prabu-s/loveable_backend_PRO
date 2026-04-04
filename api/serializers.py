@@ -277,23 +277,33 @@ class GiftTransactionSerializer(serializers.ModelSerializer):
         fields = ['id', 'sender', 'receiver', 'gift', 'created_at']
 
 class ContactSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    username = serializers.CharField()
+    id = serializers.IntegerField() # User ID for 1v1, Room ID for Groups
+    username = serializers.CharField(required=False, allow_null=True)
     display_name = serializers.SerializerMethodField()
     photo = serializers.SerializerMethodField()
-    last_message = serializers.CharField()
-    last_message_type = serializers.CharField()
-    last_timestamp = serializers.DateTimeField()
+    last_message = serializers.CharField(required=False, allow_null=True)
+    last_message_type = serializers.CharField(required=False, allow_null=True)
+    last_timestamp = serializers.DateTimeField(required=False, allow_null=True)
     unread_count = serializers.IntegerField(default=0)
     streak_count = serializers.IntegerField(default=0)
-    streak_last_interaction = serializers.DateTimeField(required=False)
+    streak_last_interaction = serializers.DateTimeField(required=False, allow_null=True)
+    
+    # Group Fields
+    is_group = serializers.BooleanField(default=False)
+    room_id = serializers.IntegerField()
+    name = serializers.CharField(required=False, allow_null=True)
+    group_avatar = serializers.CharField(required=False, allow_null=True)
 
     def get_display_name(self, obj):
+        if getattr(obj, 'is_group', False):
+            return getattr(obj, 'name', 'Group')
         profile = getattr(obj, 'profile', None)
-        return profile.display_name if profile else obj.username
+        return profile.display_name if profile else getattr(obj, 'username', 'User')
 
     def get_photo(self, obj):
         request = self.context.get('request')
+        if getattr(obj, 'is_group', False):
+            return getattr(obj, 'group_avatar', None)
         profile = getattr(obj, 'profile', None)
         if profile:
             return get_absolute_media_url(profile.photo, request)
