@@ -154,10 +154,12 @@ def send_message(
     reply_to_id: Optional[int] = None,
 ) -> Message:
     room = Room.objects.get(id=room_id)
-    other_user = room.receiver if room.caller == sender else room.caller
-
-    # Update Streak logic
-    update_streak(sender, other_user)
+    
+    # Update Streak logic (Private chats only)
+    if not room.is_group:
+        other_user = room.receiver if room.caller == sender else room.caller
+        if other_user:
+            update_streak(sender, other_user)
     
     # Optional reply handling
     reply_to = None
