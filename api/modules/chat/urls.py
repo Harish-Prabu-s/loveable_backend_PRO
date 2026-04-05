@@ -3,7 +3,7 @@ from .controllers import (
     create_room_view, my_rooms_view, messages_view, send_message_view, 
     presence_view, start_call_view, end_call_view, contact_list_view,
     mark_seen_view, toggle_disappearing_view, update_theme_view,
-    create_group_view, add_member_view, room_detail_view
+    create_group_view, add_member_view, room_detail_view, react_message_view
 )
 
 urlpatterns = [
@@ -21,4 +21,5 @@ urlpatterns = [
     path('rooms/<int:room_id>/toggle-disappearing/', toggle_disappearing_view),
     path('messages/<int:room_id>/mark-seen/', mark_seen_view),
     path('rooms/<int:room_id>/update_theme/', update_theme_view),
+    path('messages/<int:message_id>/react/', react_message_view),
 ]

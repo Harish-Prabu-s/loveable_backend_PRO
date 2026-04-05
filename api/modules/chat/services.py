@@ -419,3 +419,57 @@ def update_room_theme(room_id: int, chat_theme: str):
         import logging
         logging.getLogger(__name__).error(f"Error updating room theme: {e}\n{traceback.format_exc()}")
         return False
+
+def react_message(message_id: int, user: User, emoji: str):
+    """Add/Remove a reaction to a message and notify participants."""
+    from ...models import Message, MessageReaction
+    try:
+        msg = Message.objects.get(id=message_id)
+        room = msg.room
+        
+        # Toggle logic: if user already reacted with SAME emoji, remove it.
+        # If they reacted with DIFFERENT emoji, we can either add another OR replace.
+        # Common pattern: one reaction per user per message (replacing if different).
+        # But unique_together says (message, user, emoji). Let's stick to toggle.
+        
+        existing = MessageReaction.objects.filter(message=msg, user=user, emoji=emoji).first()
+        if existing:
+            existing.delete()
+            action = 'removed'
+        else:
+            MessageReaction.objects.create(message=msg, user=user, emoji=emoji)
+            action = 'added'
+            
+        # Get all reactions for this message to broadcast
+        all_reactions = list(MessageReaction.objects.filter(message=msg).values('user_id', 'emoji'))
+        
+        # Notify Participants in Real-Time
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            targets = []
+            if room.is_group:
+                targets = [m.user_id for m in room.members.all()]
+            else:
+                targets = [room.caller_id, room.receiver_id]
+
+            for u_id in targets:
+                async_to_sync(channel_layer.group_send)(
+                    f'chat_{u_id}',
+                    {
+                        'type': 'send_message',
+                        'content': {
+                            'type': 'reaction_updated',
+                            'message_id': message_id,
+                            'room_id': room.id,
+                            'user_id': user.id,
+                            'emoji': emoji,
+                            'action': action,
+                            'all_reactions': all_reactions
+                        }
+                    }
+                )
+        return all_reactions
+    except Message.DoesNotExist:
+        raise Exception("Message not found")

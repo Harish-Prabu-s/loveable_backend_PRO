@@ -280,3 +280,19 @@ def add_member_view(request, room_id: int):
         return Response({'error': 'Failed to add member'}, status=400)
     except Exception as e:
         return Response({'error': str(e)}, status=400)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def react_message_view(request, message_id: int):
+    try:
+        from .services import react_message
+        emoji = request.data.get('emoji')
+        if not emoji:
+            return Response({'error': 'emoji required'}, status=400)
+            
+        reactions = react_message(message_id, request.user, emoji)
+        return Response({'status': 'ok', 'reactions': reactions})
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error reacting to message: {e}")
+        return Response({'error': str(e)}, status=400)
