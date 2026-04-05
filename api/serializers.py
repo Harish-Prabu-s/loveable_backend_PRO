@@ -194,9 +194,22 @@ class RoomSerializer(serializers.ModelSerializer):
         fields = ['id', 'caller', 'receiver', 'caller_profile', 'receiver_profile', 'call_type', 'status', 'started_at', 'ended_at', 'duration_seconds', 'coins_spent', 'created_at', 'chat_theme', 'disappearing_messages_enabled', 'disappearing_timer', 'is_group', 'name', 'group_avatar', 'is_archived']
 
 class MessageSerializer(serializers.ModelSerializer):
+    reply_to = serializers.SerializerMethodField()
+    
     class Meta:
         model = Message
         fields = ['id', 'room', 'sender', 'content', 'type', 'media_url', 'duration_seconds', 'created_at', 'is_seen', 'seen_at', 'expires_at', 'reply_to']
+
+    def get_reply_to(self, obj):
+        if obj.reply_to:
+            return {
+                'id': obj.reply_to.id,
+                'content': obj.reply_to.content,
+                'type': obj.reply_to.type,
+                'sender': obj.reply_to.sender.id,
+                'created_at': obj.reply_to.created_at
+            }
+        return None
 
 class StreakSerializer(serializers.ModelSerializer):
     class Meta:
