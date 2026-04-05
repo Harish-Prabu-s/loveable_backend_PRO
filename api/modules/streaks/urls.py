@@ -1,5 +1,6 @@
-    toggle_user_fire, streak_leaderboard_view, view_streak_view, repost_streak_view
-)
+from api.modules.streaks.controllers import view_streaks, toggle_user_fire, streak_leaderboard_view, view_streak_view, \
+    repost_streak_view, view_streaks_snapchat, upload_streak, get_streak_upload, toggle_like, list_comments, \
+    add_comment, toggle_fire
 from django.urls import path
 urlpatterns = [
     path('', view_streaks),
