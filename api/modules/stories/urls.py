@@ -2,7 +2,7 @@ from django.urls import path
 from .controllers import (
     list_stories_view, create_story_view, upload_story_media_view,
     view_story_view, list_story_views_view, like_story_view,
-    comment_story_view, list_story_comments_view, delete_story_view, repost_story_view
+    comment_story_view, list_story_comments_view, delete_story_view, repost_story_view, detail_story_view
 )
 
 urlpatterns = [
