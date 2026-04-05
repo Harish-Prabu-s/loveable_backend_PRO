@@ -193,7 +193,6 @@ def share_post(post_id: int, user, target_user_id: int, request=None):
             object_id=post.id
         )
 
-        tokens = _get_user_tokens(target_user.id)
         if tokens:
             send_push_notification(
                 tokens, 
@@ -202,6 +201,22 @@ def share_post(post_id: int, user, target_user_id: int, request=None):
                 data={'type': 'post_share', 'post_id': post.id, 'from_user_id': user.id}
             )
         
+        # Award coins for sharing (5 coins)
+        try:
+            from ...models import Wallet, CoinTransaction
+            wallet, _ = Wallet.objects.get_or_create(user=user)
+            wallet.coin_balance += 5
+            wallet.save(update_fields=['coin_balance', 'updated_at'])
+            CoinTransaction.objects.create(
+                wallet=wallet,
+                amount=5,
+                type='credit',
+                transaction_type='earned',
+                description=f"Reward for sharing Post #{post.id}"
+            )
+        except Exception as e:
+            print(f"Error awarding coins for sharing post: {e}")
+
         return True
     except (Post.DoesNotExist, User.DoesNotExist):
         return False

@@ -4,6 +4,7 @@ from channels.db import database_sync_to_async
 from api.models import Room, InteractiveGameSession, PlayerState, QuestionBank, GameEventLog
 from django.contrib.auth.models import User
 import random
+from .couple_game_consumer import CoupleGameConsumer
 
 class GameConsumer(AsyncWebsocketConsumer):
     async def connect(self):

@@ -195,6 +195,7 @@ def contact_list_view(request):
             # Use dot notation for serializer compatibility
             other_user.is_group = False
             other_user.room_id = room.id
+            other_user.contact_id = room.id # Use room.id as the unique ID for the list
             other_user.last_message = last_msg.content
             other_user.last_message_type = last_msg.type
             other_user.last_timestamp = last_msg.created_at
@@ -231,6 +232,11 @@ def contact_list_view(request):
         # Final Sort by Last Timestamp
         contacts_data.sort(key=lambda x: x.last_timestamp if x.last_timestamp else timezone.now(), reverse=True)
             
+        # Ensure 'id' is set to room.id for all entries to prevent duplicate keys in frontend
+        for c in contacts_data:
+            if hasattr(c, 'contact_id'):
+                c.id = c.contact_id
+                
         return Response(ContactSerializer(contacts_data, many=True, context={'request': request}).data)
     except Exception as e:
         import traceback

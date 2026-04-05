@@ -5,7 +5,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from ...serializers import ReelSerializer
 from .services import (
     list_reels, create_reel, toggle_reel_like, add_reel_comment,
-    get_reel_comments, share_reel_to_chat, delete_reel_service
+    get_reel_comments, share_reel_to_chat, delete_reel_service,
+    get_reel_by_id
 )
 from django.core.files.storage import FileSystemStorage
 from django.conf import settings
@@ -217,3 +218,10 @@ def repost_reel_view(request, pk: int):
     if not reel:
         return Response({'error': 'reel not found'}, status=404)
     return Response(ReelSerializer(reel, context={'request': request}).data, status=201)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def detail_reel_view(request, pk: int):
+    reel = get_reel_by_id(pk)
+    if not reel:
+        return Response({'error': 'reel not found'}, status=404)
+    return Response(ReelSerializer(reel, context={'request': request}).data)

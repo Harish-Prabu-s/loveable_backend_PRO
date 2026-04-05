@@ -178,6 +178,7 @@ class StreakSerializer(serializers.ModelSerializer):
 
 class StorySerializer(serializers.ModelSerializer):
     user_display_name = serializers.CharField(source='user.profile.display_name', read_only=True)
+    user_username = serializers.CharField(source='user.username', read_only=True)
     user_avatar = serializers.SerializerMethodField()
     view_count = serializers.IntegerField(source='views.count', read_only=True)
     media_url = serializers.SerializerMethodField()
@@ -192,7 +193,7 @@ class StorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Story
-        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user']
+        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_username', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user']
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -234,6 +235,7 @@ class StoryViewSerializer(serializers.ModelSerializer):
 
 class ReelSerializer(serializers.ModelSerializer):
     user_display_name = serializers.CharField(source='user.profile.display_name', read_only=True)
+    user_username = serializers.CharField(source='user.username', read_only=True)
     user_avatar = serializers.SerializerMethodField()
     video_url = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
@@ -247,7 +249,7 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_avatar', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user']
+        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user']
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -318,7 +320,7 @@ class ContactSerializer(serializers.Serializer):
 class PostSerializer(serializers.ModelSerializer):
     profile_id = serializers.IntegerField(source='user.profile.id', read_only=True)
     display_name = serializers.CharField(source='user.profile.display_name', read_only=True)
-    username = serializers.CharField(source='user.profile.display_name', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
     photo = serializers.SerializerMethodField()
     gender = serializers.CharField(source='user.profile.gender', read_only=True)
     image = serializers.SerializerMethodField()

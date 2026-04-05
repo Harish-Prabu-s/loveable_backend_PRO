@@ -102,16 +102,16 @@ def handle_mentions(text, actor, content_type, object_id, request=None, obj=None
             
             if content_type == 'post':
                 share_type = 'post_share'
-                share_content = f"[MENTIONED_POST_SHARE:{object_id}]"
+                share_content = f"I mentioned you in a post! Check it out. [POST_SHARE:{object_id}]"
             elif content_type == 'reel':
                 share_type = 'reel_share'
-                share_content = f"[MENTIONED_REEL_SHARE:{object_id}]"
+                share_content = f"I mentioned you in a reel! Check it out. [REEL_SHARE:{object_id}]"
             elif content_type == 'story':
                 share_type = 'story_share'
-                share_content = f"[MENTIONED_STORY_SHARE:{object_id}]"
+                share_content = f"I mentioned you in a story! Check it out. [STORY_SHARE:{object_id}]"
             elif content_type == 'streak':
                 share_type = 'streak_share'
-                share_content = f"[MENTIONED_STREAK_SHARE:{object_id}]"
+                share_content = f"I mentioned you in a streak! Check it out. [STREAK_SHARE:{object_id}]"
             
             send_message(room.id, actor, share_content, share_type)
         except Exception as e:

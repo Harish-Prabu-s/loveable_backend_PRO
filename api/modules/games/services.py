@@ -16,7 +16,26 @@ def send_game_invite(sender: User, recipient_id: int, game_id: str):
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
         
-        # 1. Create DB Notification
+        # 1. Deduct Entry Fee (10 coins)
+        from ...models import Wallet, CoinTransaction
+        from django.db import transaction
+        
+        wallet, _ = Wallet.objects.get_or_create(user=sender)
+        if wallet.coin_balance < 10:
+            return False # Insufficient coins
+            
+        with transaction.atomic():
+            wallet.coin_balance = models.F('coin_balance') - 10
+            wallet.total_spent = models.F('total_spent') + 10
+            wallet.save(update_fields=['coin_balance', 'total_spent'])
+            
+            CoinTransaction.objects.create(
+                wallet=wallet, amount=10,
+                type='debit', transaction_type='game_spent',
+                description=f"Entry fee for {game_id.replace('_', ' ').title()}"
+            )
+
+        # 2. Create DB Notification
         msg = f"{sender.username} invited you to play {game_id.replace('_', ' ').title()}!"
         create_notification(
             recipient=recipient,
@@ -127,3 +146,38 @@ def get_icebreaker_prompt(kind: str):
     if k == "role_play":
         return {"type": "role_play", "scene": random.choice(ROLE_PLAY_SCENES)}
     return {"type": "unknown", "prompt": "Unsupported icebreaker"}
+
+def initialize_couple_game(room_id, game_mode):
+    """
+    Initialize a new InteractiveGameSession for a couple room.
+    """
+    from api.models import (
+        Room, GameRoom, InteractiveGameSession, PlayerState
+    )
+    try:
+        room = Room.objects.get(id=room_id)
+        # 1. Update/Ensure GameRoom exists
+        game_room, _ = GameRoom.objects.get_or_create(
+            id=room.id,
+            defaults={
+                'room_type': 'couple',
+                'game_mode': game_mode,
+                'status': 'in_progress'
+            }
+        )
+        
+        # 2. Reset or create session
+        session, created = InteractiveGameSession.objects.get_or_create(
+            room=game_room,
+            defaults={'current_state': 'Waiting'}
+        )
+        
+        if not created:
+            session.current_state = 'Waiting'
+            session.round_number = 1
+            session.action_payload = {}
+            session.save()
+            
+        return session
+    except Room.DoesNotExist:
+        return None

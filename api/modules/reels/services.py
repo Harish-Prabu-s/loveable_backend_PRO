@@ -109,6 +109,23 @@ def share_reel_to_chat(reel_id: int, sender: User, target_user_id: int):
             content=f"[REEL_SHARE:{reel.id}]",
             type='reel_share'
         )
+        
+        # Award coins for sharing (10 coins)
+        try:
+            from ...models import Wallet, CoinTransaction
+            wallet, _ = Wallet.objects.get_or_create(user=sender)
+            wallet.coin_balance += 10
+            wallet.save(update_fields=['coin_balance', 'updated_at'])
+            CoinTransaction.objects.create(
+                wallet=wallet,
+                amount=10,
+                type='credit',
+                transaction_type='earned',
+                description=f"Reward for sharing Reel #{reel.id}"
+            )
+        except Exception as e:
+            print(f"Error awarding coins for sharing reel: {e}")
+
         return {'success': True, 'target_user': target_user, 'reel': reel}
     except (Reel.DoesNotExist, User.DoesNotExist):
         return None
@@ -162,5 +179,11 @@ def repost_reel(user, original_reel_id):
             reposted_from=original
         )
         return repost
+    except Reel.DoesNotExist:
+        return None
+
+def get_reel_by_id(pk: int):
+    try:
+        return Reel.objects.get(pk=pk)
     except Reel.DoesNotExist:
         return None

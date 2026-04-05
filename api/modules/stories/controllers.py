@@ -205,3 +205,12 @@ def repost_story_view(request, story_id: int):
     if not story:
         return Response({'error': 'story not found'}, status=404)
     return Response(StorySerializer(story, context={'request': request}).data, status=201)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def detail_story_view(request, story_id: int):
+    try:
+        story = Story.objects.get(id=story_id)
+        return Response(StorySerializer(story, context={'request': request}).data)
+    except Story.DoesNotExist:
+        return Response({'error': 'Story not found'}, status=404)

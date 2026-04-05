@@ -158,37 +158,40 @@ def send_message(
     # Update Streak logic
     update_streak(sender, other_user)
 
-    # Coin Deduction Logic
-    from ..monetization.services import get_chat_cost, get_media_cost
+    # Coin Deduction/Reward Logic
+    from ..monetization.services import get_chat_cost
     from ...models import Wallet, CoinTransaction
     from django.db import transaction
 
-    cost = 0
+    # 1. Deduct for text (if applicable)
     if msg_type == 'text':
         cost = get_chat_cost()
-    elif msg_type == 'image':
-        cost = get_media_cost('photo')
-    elif msg_type == 'video':
-        cost = get_media_cost('video_msg')
-    elif msg_type == 'voice':
-        cost = get_media_cost('voice_msg')
+        if cost > 0:
+            wallet, _ = Wallet.objects.get_or_create(user=sender)
+            if wallet.coin_balance < cost:
+                raise Exception("Insufficient coins")
+            with transaction.atomic():
+                wallet.coin_balance = models.F('coin_balance') - cost
+                wallet.total_spent = models.F('total_spent') + cost
+                wallet.save(update_fields=['coin_balance', 'total_spent'])
+                CoinTransaction.objects.create(
+                    wallet=wallet, amount=cost,
+                    type='debit', transaction_type='chat_spent',
+                    description='Sent text message'
+                )
 
-    if cost > 0:
+    # 2. Award for media (as per user request: Image=5, Video=10)
+    elif msg_type in ['image', 'video']:
+        reward = 5 if msg_type == 'image' else 10
         wallet, _ = Wallet.objects.get_or_create(user=sender)
-        if wallet.coin_balance < cost:
-            raise Exception("Insufficient coins")
-        
         with transaction.atomic():
-            wallet.coin_balance = models.F('coin_balance') - cost
-            wallet.total_spent = models.F('total_spent') + cost
-            wallet.save(update_fields=['coin_balance', 'total_spent'])
-            
+            wallet.coin_balance = models.F('coin_balance') + reward
+            wallet.total_earned = models.F('total_earned') + reward
+            wallet.save(update_fields=['coin_balance', 'total_earned'])
             CoinTransaction.objects.create(
-                wallet=wallet,
-                type='debit',
-                transaction_type='chat_spent',
-                amount=cost,
-                description=f'Sent {msg_type} message'
+                wallet=wallet, amount=reward,
+                type='credit', transaction_type='earned',
+                description=f'Reward for sharing {msg_type} in chat'
             )
 
     msg = Message.objects.create(

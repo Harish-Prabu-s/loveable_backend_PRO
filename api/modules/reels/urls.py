@@ -9,6 +9,7 @@ urlpatterns = [
     path('', list_reels_view),
     path('create/', create_reel_view),
     path('upload/', upload_reel_media_view),
+    path('<int:pk>/', detail_reel_view),
     path('<int:pk>/like/', like_reel_view),
     path('<int:pk>/comment/', comment_reel_view),
     path('<int:pk>/comments/', list_comments_view, name='list-reel-comments'),

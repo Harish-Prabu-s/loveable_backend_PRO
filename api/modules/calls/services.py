@@ -26,9 +26,16 @@ def initiate_call(caller, callee, call_type: str, room_id: str = None) -> CallSe
     if not allowed:
         raise PermissionError(reason)
 
-    coins_per_min = get_call_cost_per_min(
-        'audio_call' if call_type == 'VOICE' else 'video_call'
-    )
+    if call_type == 'VOICE':
+        action = 'audio_call'
+    elif call_type == 'VIDEO':
+        action = 'video_call'
+    elif call_type == 'PRIVATE':
+        action = 'private_call'
+    else:
+        action = 'audio_call' # fallback
+
+    coins_per_min = get_call_cost_per_min(action)
     session = CallSession.objects.create(
         caller=caller,
         callee=callee,
@@ -99,12 +106,37 @@ def end_call(session: CallSession) -> dict:
 
     # Deduct coins from caller
     try:
+        from api.models import Wallet, CoinTransaction
         wallet = session.caller.wallet
-        wallet.coin_balance = max(0, wallet.coin_balance - coins_spent)
-        wallet.total_spent += coins_spent
-        wallet.save(update_fields=['coin_balance', 'total_spent', 'updated_at'])
-    except Wallet.DoesNotExist:
-        pass
+        # Only deduct if session lasted long enough to cost something
+        if coins_spent > 0:
+            wallet.coin_balance = max(0, wallet.coin_balance - coins_spent)
+            wallet.total_spent += coins_spent
+            wallet.save(update_fields=['coin_balance', 'total_spent', 'updated_at'])
+            
+            CoinTransaction.objects.create(
+                wallet=wallet,
+                amount=coins_spent,
+                type='debit',
+                transaction_type='spent',
+                description=f"Call with {session.callee.username} ({minutes} min)"
+            )
+            
+            # Credit coins to callee (Host Earnings)
+            callee_wallet, _ = Wallet.objects.get_or_create(user=session.callee)
+            callee_wallet.coin_balance += coins_spent
+            callee_wallet.total_earned += coins_spent
+            callee_wallet.save(update_fields=['coin_balance', 'total_earned', 'updated_at'])
+            
+            CoinTransaction.objects.create(
+                wallet=callee_wallet,
+                amount=coins_spent,
+                type='credit',
+                transaction_type='earned',
+                description=f"Earnings from call with {session.caller.username}"
+            )
+    except Exception as e:
+        print(f"Error processing call coin transaction: {e}")
 
     # Update league stats for both participants
     current_month = now.month
