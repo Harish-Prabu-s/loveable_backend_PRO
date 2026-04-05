@@ -151,3 +151,29 @@ def streak_leaderboard_view(request):
         import logging
         logging.getLogger(__name__).error(f"Error in streak_leaderboard_view: {e}")
         return Response({'error': str(e)}, status=400)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def view_streak_view(request, upload_id: int):
+    from ...models import StreakUpload, StreakView
+    try:
+        upload = StreakUpload.objects.get(pk=upload_id)
+        StreakView.objects.get_or_create(streak_upload=upload, viewer=request.user)
+        return Response({'success': True})
+    except StreakUpload.DoesNotExist:
+        return Response({'error': 'Streak upload not found'}, status=404)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def repost_streak_view(request, upload_id: int):
+    from .services import repost_streak
+    repost = repost_streak(request.user, upload_id)
+    if not repost:
+        return Response({'error': 'streak not found'}, status=404)
+        
+    # Notify original owner
+    if repost.reposted_from and repost.reposted_from.user != request.user:
+        from ..notifications.repost_service import notify_content_repost
+        notify_content_repost(request.user, repost.reposted_from.user, 'streak', repost.id)
+
+    return Response({'success': True, 'id': repost.id}, status=201)

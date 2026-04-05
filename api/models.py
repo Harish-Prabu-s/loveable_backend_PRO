@@ -30,6 +30,27 @@ class PostComment(models.Model):
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
+class PostView(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='views')
+    viewer = models.ForeignKey(User, on_delete=models.CASCADE)
+    viewed_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        unique_together = ('post', 'viewer')
+
+class ReelView(models.Model):
+    reel = models.ForeignKey(Reel, on_delete=models.CASCADE, related_name='views')
+    viewer = models.ForeignKey(User, on_delete=models.CASCADE)
+    viewed_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        unique_together = ('reel', 'viewer')
+
+class StreakView(models.Model):
+    streak_upload = models.ForeignKey(StreakUpload, on_delete=models.CASCADE, related_name='views')
+    viewer = models.ForeignKey(User, on_delete=models.CASCADE)
+    viewed_at = models.DateTimeField(auto_now_add=True)
+    class Meta:
+        unique_together = ('streak_upload', 'viewer')
+
 class Profile(models.Model):
     GENDER_CHOICES = (
         ('M', 'Male'),

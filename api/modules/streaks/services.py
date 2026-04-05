@@ -439,3 +439,20 @@ def get_streaks_list_service(user: User, view_type: str = 'friends', request=Non
         import logging
         logging.getLogger(__name__).error(f"Error in get_streaks_list_service: {e}")
         return []
+
+def repost_streak(user, original_streak_id):
+    """Create a repost of an existing streak upload."""
+    try:
+        from ...models import StreakUpload
+        original = StreakUpload.objects.get(id=original_streak_id)
+        repost = StreakUpload.objects.create(
+            user=user,
+            media_url=original.media_url,
+            media_type=original.media_type,
+            caption=original.caption,
+            visibility='all',
+            reposted_from=original
+        )
+        return repost
+    except StreakUpload.DoesNotExist:
+        return None

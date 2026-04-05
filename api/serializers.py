@@ -5,7 +5,7 @@ from .models import (
     Profile, Wallet, CoinTransaction, Payment, Withdrawal,
     Game, LevelProgress, Offer, LeagueTier, CallSession,
     Badge, DailyReward, Room, Message, Story, Gift, GiftTransaction, StoryView, Follow, Reel, Streak, Post, PostLike,
-    CloseFriend
+    CloseFriend, PostView, ReelView, StreakView, StreakUpload
 )
 from .utils import get_absolute_media_url
 
@@ -260,6 +260,45 @@ class StoryViewSerializer(serializers.ModelSerializer):
             return get_absolute_media_url(profile.photo, request)
         return None
 
+class PostViewSerializer(serializers.ModelSerializer):
+    viewer_name = serializers.CharField(source='viewer.profile.display_name', read_only=True)
+    viewer_avatar = serializers.SerializerMethodField()
+    class Meta:
+        model = PostView
+        fields = ['id', 'viewer', 'viewer_name', 'viewer_avatar', 'viewed_at']
+    def get_viewer_avatar(self, obj):
+        request = self.context.get('request')
+        profile = getattr(obj.viewer, 'profile', None)
+        if profile:
+            return get_absolute_media_url(profile.photo, request)
+        return None
+
+class ReelViewSerializer(serializers.ModelSerializer):
+    viewer_name = serializers.CharField(source='viewer.profile.display_name', read_only=True)
+    viewer_avatar = serializers.SerializerMethodField()
+    class Meta:
+        model = ReelView
+        fields = ['id', 'viewer', 'viewer_name', 'viewer_avatar', 'viewed_at']
+    def get_viewer_avatar(self, obj):
+        request = self.context.get('request')
+        profile = getattr(obj.viewer, 'profile', None)
+        if profile:
+            return get_absolute_media_url(profile.photo, request)
+        return None
+
+class StreakViewSerializer(serializers.ModelSerializer):
+    viewer_name = serializers.CharField(source='viewer.profile.display_name', read_only=True)
+    viewer_avatar = serializers.SerializerMethodField()
+    class Meta:
+        model = StreakView
+        fields = ['id', 'viewer', 'viewer_name', 'viewer_avatar', 'viewed_at']
+    def get_viewer_avatar(self, obj):
+        request = self.context.get('request')
+        profile = getattr(obj.viewer, 'profile', None)
+        if profile:
+            return get_absolute_media_url(profile.photo, request)
+        return None
+
 class ReelSerializer(serializers.ModelSerializer):
     user_display_name = serializers.SerializerMethodField()
     user_username = serializers.CharField(source='user.username', read_only=True)
@@ -267,6 +306,7 @@ class ReelSerializer(serializers.ModelSerializer):
     video_url = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
+    view_count = serializers.IntegerField(source='views.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
@@ -277,7 +317,7 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'is_following', 'mentioned_users', 'reposted_from', 'parent_user']
+        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'mentioned_users', 'reposted_from', 'parent_user']
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -364,17 +404,21 @@ class PostSerializer(serializers.ModelSerializer):
     photo = serializers.SerializerMethodField()
     gender = serializers.CharField(source='user.profile.gender', read_only=True)
     image = serializers.SerializerMethodField()
+    caption = serializers.CharField()
+    image = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
+    view_count = serializers.IntegerField(source='views.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
+    aspect_ratio = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
             'id', 'user', 'profile_id', 'display_name', 'username', 'photo', 'gender',
-            'caption', 'image', 'likes_count', 'comments_count', 'is_liked', 'is_owner',
-            'created_at', 'mentioned_users', 'reposted_from', 'parent_user'
+            'caption', 'image', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner',
+            'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio'
         ]
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -414,6 +458,14 @@ class PostSerializer(serializers.ModelSerializer):
         if user:
             return obj.user == user
         return False
+
+    def get_aspect_ratio(self, obj):
+        if not obj.image:
+            return 1.0
+        try:
+            return obj.image.width / obj.image.height
+        except Exception:
+            return 1.0
 
 class CloseFriendSerializer(serializers.ModelSerializer):
     close_friend = SimpleUserSerializer()

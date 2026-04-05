@@ -204,6 +204,12 @@ def repost_story_view(request, story_id: int):
     story = repost_story(request.user, story_id)
     if not story:
         return Response({'error': 'story not found'}, status=404)
+        
+    # Notify original owner
+    if story.reposted_from and story.reposted_from.user != request.user:
+        from ..notifications.repost_service import notify_content_repost
+        notify_content_repost(request.user, story.reposted_from.user, 'story', story.id)
+
     return Response(StorySerializer(story, context={'request': request}).data, status=201)
 
 @api_view(['GET'])

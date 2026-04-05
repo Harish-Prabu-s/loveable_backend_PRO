@@ -183,4 +183,21 @@ def repost_view(request, post_id: int):
     post = repost_post(request.user, post_id)
     if not post:
         return Response({'error': 'post not found'}, status=404)
+        
+    # Notify original owner
+    if post.reposted_from and post.reposted_from.user != request.user:
+        from ..notifications.repost_service import notify_content_repost
+        notify_content_repost(request.user, post.reposted_from.user, 'post', post.id)
+
     return Response(_serialize_post(post, request.user, request), status=201)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def view_post_view(request, post_id: int):
+    from ...models import Post, PostView
+    try:
+        post = Post.objects.get(pk=post_id)
+        PostView.objects.get_or_create(post=post, viewer=request.user)
+        return Response({'success': True})
+    except Post.DoesNotExist:
+        return Response({'error': 'Post not found'}, status=404)

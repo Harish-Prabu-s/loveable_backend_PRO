@@ -62,6 +62,7 @@ def create_reel_view(request):
         except:
             mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
             
+    relative_video_path = strip_base_url(video_url) if video_url else ''
     reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions)
     return Response(ReelSerializer(reel, context={'request': request}).data, status=201)
 
@@ -217,7 +218,24 @@ def repost_reel_view(request, pk: int):
     reel = repost_reel(request.user, pk)
     if not reel:
         return Response({'error': 'reel not found'}, status=404)
+        
+    # Notify original owner
+    if reel.reposted_from and reel.reposted_from.user != request.user:
+        from ..notifications.repost_service import notify_content_repost
+        notify_content_repost(request.user, reel.reposted_from.user, 'reel', reel.id)
+
     return Response(ReelSerializer(reel, context={'request': request}).data, status=201)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def view_reel_view(request, pk: int):
+    from ...models import Reel, ReelView
+    try:
+        reel = Reel.objects.get(pk=pk)
+        ReelView.objects.get_or_create(reel=reel, viewer=request.user)
+        return Response({'success': True})
+    except Reel.DoesNotExist:
+        return Response({'error': 'Reel not found'}, status=404)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def detail_reel_view(request, pk: int):
