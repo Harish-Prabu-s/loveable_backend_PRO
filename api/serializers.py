@@ -136,9 +136,17 @@ class WalletSerializer(serializers.ModelSerializer):
         return obj.transactions.filter(transaction_type='purchase').exists()
 
 class CoinTransactionSerializer(serializers.ModelSerializer):
+    actor_display_name = serializers.SerializerMethodField()
+
     class Meta:
         model = CoinTransaction
-        fields = ['id', 'wallet', 'type', 'transaction_type', 'amount', 'description', 'created_at']
+        fields = ['id', 'wallet', 'type', 'transaction_type', 'amount', 'description', 'created_at', 'actor_display_name']
+
+    def get_actor_display_name(self, obj):
+        if obj.target_user:
+            profile = getattr(obj.target_user, 'profile', None)
+            return profile.display_name if profile else obj.target_user.username
+        return None
 
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:

@@ -14,7 +14,8 @@ def notify_content_repost(reposter: User, original_owner: User, content_type: st
     reposter_name = profile.display_name if profile else reposter.username
     
     title = "Content Reposted!"
-    body = f"{reposter_name} added your {content_type} to their {content_type}!"
+    # User request: "reposted your story or reel or post or streak"
+    body = f"{reposter_name} reposted your {content_type}!"
     
     # 1. Create In-App Notification
     create_notification(

@@ -45,7 +45,7 @@ class Profile(models.Model):
     date_joined = models.DateTimeField(default=timezone.now)
     last_login = models.DateTimeField(null=True, blank=True)
     email = models.EmailField(null=True, blank=True)
-    display_name = models.CharField(max_length=120, default='User')
+    display_name = models.CharField(max_length=120, default='User', unique=True)
     bio = models.TextField(blank=True)
     photo = models.ImageField(upload_to='profiles/', null=True, blank=True)
     device_token = models.CharField(max_length=255, null=True, blank=True)
@@ -154,6 +154,7 @@ class CoinTransaction(models.Model):
     transaction_type = models.CharField(max_length=20)  # purchase/spent/earned/withdrawal
     amount = models.IntegerField()
     description = models.CharField(max_length=255)
+    target_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='involved_transactions')
     created_at = models.DateTimeField(auto_now_add=True)
 
 class DeletionRequest(models.Model):

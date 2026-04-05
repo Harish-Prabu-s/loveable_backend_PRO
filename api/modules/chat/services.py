@@ -178,6 +178,8 @@ def send_message(
             wallet, _ = Wallet.objects.get_or_create(user=sender)
             if wallet.coin_balance < cost:
                 raise Exception("Insufficient coins")
+            other_user = room.receiver if room.caller == sender else room.caller
+            target_name = getattr(other_user, 'profile', other_user).display_name if hasattr(other_user, 'profile') else other_user.username
             with transaction.atomic():
                 wallet.coin_balance = models.F('coin_balance') - cost
                 wallet.total_spent = models.F('total_spent') + cost
@@ -185,7 +187,8 @@ def send_message(
                 CoinTransaction.objects.create(
                     wallet=wallet, amount=cost,
                     type='debit', transaction_type='chat_spent',
-                    description='Sent text message'
+                    description=f"Sent text message to {target_name}",
+                    target_user=other_user
                 )
 
     # 2. Award for media (as per user request: Image=5, Video=10)
