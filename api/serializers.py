@@ -15,7 +15,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'last_login', 'date_joined']
 
 class SimpleUserSerializer(serializers.ModelSerializer):
-    display_name = serializers.CharField(source='profile.display_name', read_only=True)
+    display_name = serializers.SerializerMethodField()
     photo = serializers.SerializerMethodField()
     gender = serializers.CharField(source='profile.gender', read_only=True)
     user_id = serializers.IntegerField(source='id', read_only=True)
@@ -23,6 +23,16 @@ class SimpleUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'user_id', 'username', 'display_name', 'photo', 'gender']
+
+    def get_display_name(self, obj):
+        profile = getattr(obj, 'profile', None)
+        if profile and profile.display_name and profile.display_name != 'User':
+            return profile.display_name
+        
+        # Fallback to sanitized username if display_name is default/missing
+        if obj.username.startswith('user_'):
+            return "User" # Hide the mobile number if it's the auto-generated username
+        return obj.username or "User"
 
     def get_photo(self, obj):
         request = self.context.get('request')
@@ -39,6 +49,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     friend_request_status = serializers.SerializerMethodField()
     photo = serializers.SerializerMethodField()
     is_busy = serializers.SerializerMethodField()
+    phone_number = serializers.SerializerMethodField()
+    email = serializers.SerializerMethodField()
 
     class Meta:
         model = Profile
@@ -53,6 +65,18 @@ class ProfileSerializer(serializers.ModelSerializer):
     def get_is_busy(self, obj):
         from .modules.chat.services import presence_status
         return presence_status(obj.user.id) == 'busy'
+
+    def get_phone_number(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated and obj.user == request.user:
+            return obj.phone_number
+        return None
+
+    def get_email(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated and obj.user == request.user:
+            return obj.email
+        return None
 
     def get_photo(self, obj):
         request = self.context.get('request')
@@ -162,9 +186,12 @@ class DailyRewardSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'day', 'xp_reward', 'coin_reward', 'claimed_at', 'streak']
 
 class RoomSerializer(serializers.ModelSerializer):
+    caller_profile = SimpleUserSerializer(source='caller', read_only=True)
+    receiver_profile = SimpleUserSerializer(source='receiver', read_only=True)
+
     class Meta:
         model = Room
-        fields = ['id', 'caller', 'receiver', 'call_type', 'status', 'started_at', 'ended_at', 'duration_seconds', 'coins_spent', 'created_at', 'chat_theme', 'disappearing_messages_enabled', 'disappearing_timer', 'is_group', 'name', 'group_avatar', 'is_archived']
+        fields = ['id', 'caller', 'receiver', 'caller_profile', 'receiver_profile', 'call_type', 'status', 'started_at', 'ended_at', 'duration_seconds', 'coins_spent', 'created_at', 'chat_theme', 'disappearing_messages_enabled', 'disappearing_timer', 'is_group', 'name', 'group_avatar', 'is_archived']
 
 class MessageSerializer(serializers.ModelSerializer):
     class Meta:
@@ -234,7 +261,7 @@ class StoryViewSerializer(serializers.ModelSerializer):
         return None
 
 class ReelSerializer(serializers.ModelSerializer):
-    user_display_name = serializers.CharField(source='user.profile.display_name', read_only=True)
+    user_display_name = serializers.SerializerMethodField()
     user_username = serializers.CharField(source='user.username', read_only=True)
     user_avatar = serializers.SerializerMethodField()
     video_url = serializers.SerializerMethodField()
@@ -242,6 +269,7 @@ class ReelSerializer(serializers.ModelSerializer):
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
 
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -249,12 +277,18 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user']
+        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'is_following', 'mentioned_users', 'reposted_from', 'parent_user']
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             return obj.user == request.user
+        return False
+
+    def get_is_following(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return Follow.objects.filter(follower=request.user, following=obj.user).exists()
         return False
 
     def get_is_liked(self, obj):
@@ -273,6 +307,12 @@ class ReelSerializer(serializers.ModelSerializer):
         if profile:
             return get_absolute_media_url(profile.photo, request)
         return None
+
+    def get_user_display_name(self, obj):
+        profile = getattr(obj.user, 'profile', None)
+        if profile:
+            return profile.display_name
+        return obj.user.username or 'User'
 
 class GiftSerializer(serializers.ModelSerializer):
     class Meta:
