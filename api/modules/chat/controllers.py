@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -139,7 +140,7 @@ def presence_view(request, user_id: int):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def contact_list_view(request):
-        # Just-in-time streak expiration check
+    try:    # Just-in-time streak expiration check
         expire_user_streaks(request.user)
         
         user = request.user
@@ -229,10 +230,7 @@ def contact_list_view(request):
         import logging
         logging.getLogger(__name__).error(f"Error in contact_list_view: {e}\n{traceback.format_exc()}")
         return Response([])
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Error in contact_list_view: {e}")
-        return Response([])
+
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
