@@ -151,12 +151,18 @@ def send_message(
     msg_type: str = 'text',
     media_url: Optional[str] = None,
     duration_seconds: int = 0,
+    reply_to_id: Optional[int] = None,
 ) -> Message:
     room = Room.objects.get(id=room_id)
     other_user = room.receiver if room.caller == sender else room.caller
 
     # Update Streak logic
     update_streak(sender, other_user)
+    
+    # Optional reply handling
+    reply_to = None
+    if reply_to_id:
+        reply_to = Message.objects.filter(id=reply_to_id).first()
 
     # Coin Deduction/Reward Logic
     from ..monetization.services import get_chat_cost
@@ -201,6 +207,7 @@ def send_message(
         type=msg_type,
         media_url=media_url,
         duration_seconds=duration_seconds,
+        reply_to=reply_to
     )
     
     # Notify Participants in Real-Time (Chat Channel)
@@ -293,6 +300,36 @@ def update_streak(sender: User, receiver: User):
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Failed to update streak: {e}")
+
+def expire_user_streaks(user: User):
+    """
+    Check and reset streaks that haven't been updated in 24+ hours.
+    Can be called just-in-time when loading contact list.
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+    from ...models import Streak
+    
+    threshold = timezone.now() - timedelta(hours=24)
+    
+    # Get all active streaks involving this user that are past the threshold
+    streaks = Streak.objects.filter(
+        models.Q(user1=user) | models.Q(user2=user),
+        last_interaction_date__lt=threshold,
+        streak_count__gt=0
+    )
+    
+    for s in streaks:
+        # Check if freeze can save it
+        if s.freezes_available > 0:
+            s.freezes_available -= 1
+            # Push last interaction forward by 24h to "use" the freeze
+            s.last_interaction_date = s.last_interaction_date + timedelta(hours=24)
+            s.save()
+        else:
+            s.streak_count = 0
+            s.last_uploader = None
+            s.save()
 
 def mark_room_status(room_id: int, status: str, duration_seconds: int = 0, coins_spent: int = 0):
     room = Room.objects.filter(id=room_id).first()

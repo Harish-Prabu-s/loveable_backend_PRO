@@ -5,7 +5,7 @@ from ...serializers import RoomSerializer, MessageSerializer, ContactSerializer,
 from .services import (
     get_or_create_room, list_my_rooms, list_messages, send_message, 
     presence_status, mark_room_status, mark_messages_seen, update_room_theme,
-    create_group_room, add_group_member
+    create_group_room, add_group_member, expire_user_streaks
 )
 from django.db.models import Q, Max
 from django.contrib.auth.models import User
@@ -28,26 +28,9 @@ def create_room_view(request):
 def room_detail_view(request, room_id: int):
     try:
         from ...models import Room
-        # Allow if user is caller, receiver or a group member
-        room = Room.objects.get(id=room_id)
-        is_member = room.caller == request.user or room.receiver == request.user
-        if not is_member and room.is_group:
-            is_member = room.members.filter(user=request.user).exists()
-            
-        if not is_member:
-            return Response({'error': 'forbidden'}, status=403)
-            
-        return Response(RoomSerializer(room).data)
-    except Room.DoesNotExist:
-        return Response({'error': 'Room not found'}, status=404)
-    except Exception as e:
-        return Response({'error': str(e)}, status=400)
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def room_detail_view(request, room_id: int):
-    try:
-        from ...models import Room
+        # Just-in-time streak expiration check
+        expire_user_streaks(request.user)
+        
         # Allow if user is caller, receiver or a group member
         room = Room.objects.get(id=room_id)
         is_member = room.caller == request.user or room.receiver == request.user
@@ -111,11 +94,12 @@ def send_message_view(request, room_id: int):
         msg_type = request.data.get('type', 'text')
         media_url = request.data.get('media_url')
         duration_seconds = int(request.data.get('duration_seconds', 0))
+        reply_to_id = request.data.get('reply_to_id')
         
         if not content and not media_url:
             return Response({'error': 'content or media required'}, status=400)
             
-        msg = send_message(room_id, request.user, content or '', msg_type, media_url, duration_seconds)
+        msg = send_message(room_id, request.user, content or '', msg_type, media_url, duration_seconds, reply_to_id)
         return Response(MessageSerializer(msg).data, status=201)
     except Exception as e:
         if str(e) == "Insufficient coins":
@@ -155,7 +139,9 @@ def presence_view(request, user_id: int):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def contact_list_view(request):
-    try:
+        # Just-in-time streak expiration check
+        expire_user_streaks(request.user)
+        
         user = request.user
         from django.db.models import Prefetch, Count, Max
         from ...models import Room, Message, Streak
