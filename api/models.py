@@ -9,6 +9,7 @@ class Post(models.Model):
     image = models.ImageField(upload_to='posts/', null=True, blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_posts', blank=True)
+    audio = models.ForeignKey('Audio', on_delete=models.SET_NULL, null=True, blank=True, related_name='posts')
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -29,6 +30,9 @@ class PostComment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    reply_to = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
+    likes = models.ManyToManyField(User, related_name='liked_post_comments', blank=True)
+    mentions = models.ManyToManyField(User, related_name='mentioned_in_post_comments', blank=True)
 
 class Profile(models.Model):
     GENDER_CHOICES = (
@@ -376,6 +380,9 @@ class StreakComment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    reply_to = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
+    likes = models.ManyToManyField(User, related_name='liked_streak_comments', blank=True)
+    mentions = models.ManyToManyField(User, related_name='mentioned_in_streak_comments', blank=True)
 
 class StreakLike(models.Model):
     streak_upload = models.ForeignKey(StreakUpload, on_delete=models.CASCADE, related_name='likes')
@@ -469,12 +476,24 @@ class StoryView(models.Model):
     class Meta:
         unique_together = ('story', 'viewer')
 
+class Audio(models.Model):
+    title = models.CharField(max_length=255, default='Original Audio')
+    artist = models.CharField(max_length=255, null=True, blank=True)
+    cover_image_url = models.URLField(max_length=500, null=True, blank=True)
+    file_url = models.FileField(upload_to='audios/')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_audios')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.title} by {self.artist or 'Unknown'}"
+
 class Reel(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reels')
     video_url = models.FileField(upload_to='reels/')
     caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_reels', blank=True)
+    audio = models.ForeignKey(Audio, on_delete=models.SET_NULL, null=True, blank=True, related_name='reels')
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -495,6 +514,9 @@ class ReelComment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    reply_to = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
+    likes = models.ManyToManyField(User, related_name='liked_reel_comments', blank=True)
+    mentions = models.ManyToManyField(User, related_name='mentioned_in_reel_comments', blank=True)
 
 class PostView(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='views')
@@ -530,6 +552,9 @@ class StoryComment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    reply_to = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
+    likes = models.ManyToManyField(User, related_name='liked_story_comments', blank=True)
+    mentions = models.ManyToManyField(User, related_name='mentioned_in_story_comments', blank=True)
 
 # ----------------------------------------------------------------------------
 # SOCIAL GAME ENGINE MODELS

@@ -18,6 +18,7 @@ urlpatterns = [
     path('reports/', include('api.modules.reports.urls')),
     path('gifts/', include('api.modules.gifts.urls')),
     path('uploads/', include('api.modules.uploads.urls')),
+    path('audio/', include('api.modules.audio.urls')),
     path('admin/', include('api.modules.admin.urls')),
     path('posts/', include('api.modules.posts.urls')),
     path('archive/', include('api.modules.archive.urls')),

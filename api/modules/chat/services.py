@@ -191,6 +191,28 @@ def send_message(
                     target_user=other_user
                 )
 
+    # 1.b Deduct for profile share
+    elif msg_type == 'profile_share':
+        cost = 10
+        wallet, _ = Wallet.objects.get_or_create(user=sender)
+        if wallet.coin_balance < cost:
+            raise Exception("Insufficient coins")
+        
+        other_name = "Group"
+        if not room.is_group:
+            other_user = room.receiver if room.caller == sender else room.caller
+            other_name = getattr(other_user, 'profile', other_user).display_name if hasattr(other_user, 'profile') else other_user.username
+            
+        with transaction.atomic():
+            wallet.coin_balance = models.F('coin_balance') - cost
+            wallet.total_spent = models.F('total_spent') + cost
+            wallet.save(update_fields=['coin_balance', 'total_spent'])
+            CoinTransaction.objects.create(
+                wallet=wallet, amount=cost,
+                type='debit', transaction_type='spent',
+                description=f"Shared a profile in chat with {other_name}"
+            )
+
     # 2. Award for media (as per user request: Image=5, Video=10)
     elif msg_type in ['image', 'video']:
         reward = 5 if msg_type == 'image' else 10
@@ -470,6 +492,20 @@ def react_message(message_id: int, user: User, emoji: str):
                         }
                     }
                 )
+        
+        # Push notification
+        if action == 'added':
+            from ..notifications.push_service import send_push_notification, _get_user_tokens
+            from ..notifications.services import create_notification
+            target_user = msg.sender
+            if target_user != user:
+                tokens = _get_user_tokens(target_user.id)
+                profile = getattr(user, 'profile', None)
+                sender_name = profile.display_name if profile else user.username
+                create_notification(recipient=target_user, actor=user, notification_type='message_reaction', message=f"{sender_name} reacted to your message.")
+                if tokens:
+                    send_push_notification(tokens, title="New Reaction", body=f"{sender_name} reacted to your message.", data={'type': 'message_reaction', 'room_id': room.id})
+                    
         return all_reactions
     except Message.DoesNotExist:
         raise Exception("Message not found")

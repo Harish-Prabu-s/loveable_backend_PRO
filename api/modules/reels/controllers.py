@@ -62,8 +62,14 @@ def create_reel_view(request):
         except:
             mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
             
+    audio_id = request.data.get('audio_id')
+    audio_id = int(audio_id) if audio_id and str(audio_id).isdigit() else None
+    
+    # Audio metadata
+    audio_meta = request.data.get('audio_meta')
+            
     relative_video_path = strip_base_url(video_url) if video_url else ''
-    reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions)
+    reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions, audio_id=audio_id, audio_meta=audio_meta)
     return Response(ReelSerializer(reel, context={'request': request}).data, status=201)
 
 @api_view(['POST'])
@@ -106,10 +112,11 @@ def like_reel_view(request, pk):
 @permission_classes([IsAuthenticated])
 def comment_reel_view(request, pk):
     text = request.data.get('text')
+    reply_to_id = request.data.get('reply_to_id')
     if not text:
         return Response({'error': 'text required'}, status=400)
     
-    comment = add_reel_comment(pk, request.user, text)
+    comment = add_reel_comment(pk, request.user, text, reply_to_id)
     if comment is None:
         return Response({'error': 'Reel not found'}, status=404)
 
@@ -150,19 +157,34 @@ def list_comments_view(request, pk: int):
     if comments is None:
         return Response({'error': 'Reel not found'}, status=404)
     
-    data = []
     from ...utils import get_absolute_media_url
+    
+    # Build tree
+    comment_dict = {}
+    root_comments = []
+    
     for c in comments:
         p = getattr(c.user, 'profile', None)
-        data.append({
+        comment_dict[c.id] = {
             'id': c.id,
             'user': c.user.id,
             'display_name': p.display_name if p else '',
             'photo': get_absolute_media_url(p.photo, request) if p and p.photo else None,
             'text': c.text,
+            'likes_count': c.likes.count(),
+            'is_liked': c.likes.filter(id=request.user.id).exists() if request.user.is_authenticated else False,
             'created_at': c.created_at.isoformat(),
-        })
-    return Response(data)
+            'reply_to': c.reply_to_id,
+            'replies': []
+        }
+        
+    for c in comments:
+        if c.reply_to_id and c.reply_to_id in comment_dict:
+            comment_dict[c.reply_to_id]['replies'].append(comment_dict[c.id])
+        else:
+            root_comments.append(comment_dict[c.id])
+            
+    return Response(root_comments)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])

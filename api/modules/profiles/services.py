@@ -140,3 +140,50 @@ def respond_friend_request(user: User, request_id: int, action: str):
         return req
     except FriendRequest.DoesNotExist:
         return None
+
+def share_profile_to_chat(sender: User, shared_user_id: int, target_user_id: int):
+    try:
+        shared_user = User.objects.get(pk=shared_user_id)
+        target_user = User.objects.get(pk=target_user_id)
+        
+        # Deduct 10 coins
+        from ...models import Wallet, CoinTransaction
+        wallet, _ = Wallet.objects.get_or_create(user=sender)
+        if wallet.coin_balance < 10:
+            return {'error': 'Insufficient coins (10 required).', 'status': 400}
+            
+        wallet.coin_balance -= 10
+        wallet.save(update_fields=['coin_balance', 'updated_at'])
+        
+        CoinTransaction.objects.create(
+            wallet=wallet,
+            amount=10,
+            type='debit',
+            transaction_type='spent',
+            description=f"Shared user #{shared_user.id}'s profile"
+        )
+        
+        from ..chat.services import get_or_create_room
+        from ...models import Message
+        room = get_or_create_room(sender, target_user.id, 'audio')
+        
+        message = Message.objects.create(
+            room=room,
+            sender=sender,
+            content=f"[PROFILE_SHARE:{shared_user.id}]",
+            type='profile_share'
+        )
+        
+        # Notify
+        from ..notifications.services import create_notification
+        from ..notifications.push_service import send_push_notification, _get_user_tokens
+        profile = getattr(sender, 'profile', None)
+        sender_name = profile.display_name if profile else sender.username
+        create_notification(recipient=target_user, actor=sender, notification_type='profile_share', message=f"{sender_name} shared a profile with you.")
+        tokens = _get_user_tokens(target_user.id)
+        if tokens:
+            send_push_notification(tokens, title="Shared Profile", body=f"{sender_name} shared a profile with you.", data={'type': 'profile_share'})
+            
+        return {'success': True}
+    except User.DoesNotExist:
+        return {'error': 'User not found', 'status': 404}

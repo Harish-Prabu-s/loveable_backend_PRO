@@ -28,15 +28,54 @@ def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False):
         
     return qs
 
-def create_reel(user, video_url: str, caption: str = '', visibility='all', mentions=None):
+def create_reel(user, video_url: str, caption: str = '', visibility='all', mentions=None, audio_id=None, audio_meta=None):
     reel = Reel.objects.create(user=user, video_url=video_url, caption=caption, visibility=visibility)
-    
+    if audio_id:
+        try:
+            from ...models import Audio
+            audio = Audio.objects.get(pk=audio_id)
+            reel.audio = audio
+            reel.save()
+        except Exception:
+            pass
+    elif audio_meta and isinstance(audio_meta, dict):
+        try:
+            from ...models import Audio
+            from django.core.files.base import ContentFile
+            import requests
+            
+            # Simple metadata sync
+            title = audio_meta.get('title', 'Original Audio')
+            artist = audio_meta.get('artist', 'Unknown')
+            cover_url = audio_meta.get('coverArt', '')
+            ext_url = audio_meta.get('url', '')
+            
+            audio, created = Audio.objects.get_or_create(
+                title=title, artist=artist,
+                defaults={'created_by': user, 'cover_image_url': cover_url}
+            )
+            
+            if created and ext_url:
+                audio.file_url = ext_url
+                audio.save()
+
+            reel.audio = audio
+            reel.save()
+            audio_id = audio.id
+        except Exception as e:
+            print(f"Error creating audio from meta: {e}")
+
     # Notify Close Friends, process mentions
     from ..notifications.services import notify_close_friends_of_content
     from ..notifications.utils import handle_mentions
     notify_close_friends_of_content(user, 'reel', reel.id)
     handle_mentions(caption, user, 'reel', reel.id, obj=reel, explicit_mentions=mentions)
     
+    # Launch audio extraction if no existing audio attached
+    if not audio_id:
+        from .tasks import launch_audio_extraction
+        launch_audio_extraction(reel.id)
+
     return reel
 
 def toggle_reel_like(reel_id: int, user: User):
@@ -76,10 +115,10 @@ def toggle_reel_like(reel_id: int, user: User):
     except Reel.DoesNotExist:
         return None
 
-def add_reel_comment(reel_id: int, user: User, text: str):
+def add_reel_comment(reel_id: int, user: User, text: str, reply_to_id: int = None):
     try:
         reel = Reel.objects.get(pk=reel_id)
-        comment = ReelComment.objects.create(reel=reel, user=user, text=text)
+        comment = ReelComment.objects.create(reel=reel, user=user, text=text, reply_to_id=reply_to_id)
         
         # Process Mentions
         from ..notifications.utils import handle_mentions

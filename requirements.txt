@@ -83,3 +83,5 @@ whitenoise==6.11.0
 yarl==1.22.0
 zope.interface==8.2
 PyMySQL==1.1.2
+moviepy==1.0.3
+shazamio==0.5.1

@@ -130,3 +130,16 @@ def get_following_view(request, user_id: int):
     # Fetch profiles of those users
     profiles = Profile.objects.filter(user_id__in=following_ids).select_related('user')
     return Response(ProfileSerializer(profiles, many=True, context={'request': request}).data)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def share_profile_view(request, user_id: int):
+    from .services import share_profile_to_chat
+    target_user_id = request.data.get('target_user_id')
+    if not target_user_id:
+        return Response({'error': 'target_user_id required'}, status=400)
+    
+    result = share_profile_to_chat(request.user, user_id, target_user_id)
+    if 'error' in result:
+        return Response({'error': result['error']}, status=result['status'])
+    return Response({'success': True})
