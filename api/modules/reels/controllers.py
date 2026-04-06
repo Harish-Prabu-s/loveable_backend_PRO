@@ -122,12 +122,13 @@ def comment_reel_view(request, pk):
 
     # Notification logic
     reel = comment.reel
-    if reel.user != request.user:
-        from ..notifications.push_service import send_push_notification, _get_user_tokens
-        from ..notifications.services import create_notification
+    from ..notifications.push_service import send_push_notification, _get_user_tokens
+    from ..notifications.services import create_notification
+    profile = getattr(request.user, 'profile', None)
+    sender_name = profile.display_name if profile else request.user.username
+
+    if reel.user != request.user and not reply_to_id:
         tokens = _get_user_tokens(reel.user.id)
-        profile = getattr(request.user, 'profile', None)
-        sender_name = profile.display_name if profile else request.user.username
         
         # Persist to DB
         create_notification(
@@ -143,6 +144,24 @@ def comment_reel_view(request, pk):
                 tokens, 
                 title="New Comment!", 
                 body=f"{sender_name} commented: {text[:30]}...",
+                data={'type': 'reel_comment', 'reel_id': reel.id}
+            )
+            
+    if reply_to_id and comment.reply_to and comment.reply_to.user != request.user:
+        target_user = comment.reply_to.user
+        tokens = _get_user_tokens(target_user.id)
+        create_notification(
+            recipient=target_user,
+            actor=request.user,
+            notification_type='reel_comment_reply',
+            message=f"{sender_name} replied to your comment: {text[:30]}...",
+            object_id=reel.id
+        )
+        if tokens:
+            send_push_notification(
+                tokens, 
+                title="New Reply!", 
+                body=f"{sender_name} replied to your comment: {text[:30]}...",
                 data={'type': 'reel_comment', 'reel_id': reel.id}
             )
 

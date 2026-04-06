@@ -104,24 +104,26 @@ def toggle_like(post_id: int, user):
     likes_count = PostLike.objects.filter(post=post).count()
     return {'is_liked': is_liked, 'likes_count': likes_count}
 
-def add_comment(post_id: int, user, text: str):
-    """Add a comment and notify post owner."""
+def add_comment(post_id: int, user, text: str, reply_to_id: int = None):
+    """Add a comment and notify post owner or reply target."""
     from ...models import PostComment
     from ..notifications.services import create_notification
     from ..notifications.push_service import send_push_notification, _get_user_tokens
     
     try:
         post = Post.objects.select_related('user').get(id=post_id)
-        comment = PostComment.objects.create(post=post, user=user, text=text)
+        comment = PostComment.objects.create(post=post, user=user, text=text, reply_to_id=reply_to_id)
         
         # Process Mentions
         from ..notifications.utils import handle_mentions
         handle_mentions(text, user, 'post_comment', post.id)
         
+        
+        profile = getattr(user, 'profile', None)
+        sender_name = profile.display_name if profile else user.username
+
         # Notify owner
-        if post.user != user:
-            profile = getattr(user, 'profile', None)
-            sender_name = profile.display_name if profile else user.username
+        if post.user != user and not reply_to_id:
             create_notification(
                 recipient=post.user,
                 actor=user,
@@ -132,6 +134,20 @@ def add_comment(post_id: int, user, text: str):
             tokens = _get_user_tokens(post.user.id)
             if tokens:
                 send_push_notification(tokens, title="New Comment!", body=f"{sender_name} commented: {text[:30]}...", data={'type': 'post_comment', 'post_id': post.id})
+                
+        # Notify reply target
+        if reply_to_id and comment.reply_to and comment.reply_to.user != user:
+            target_user = comment.reply_to.user
+            create_notification(
+                recipient=target_user,
+                actor=user,
+                notification_type='post_comment_reply',
+                message=f"{sender_name} replied to your comment: {text[:30]}...",
+                object_id=post.id
+            )
+            tokens = _get_user_tokens(target_user.id)
+            if tokens:
+                send_push_notification(tokens, title="New Reply!", body=f"{sender_name} replied to your comment: {text[:30]}...", data={'type': 'post_comment', 'post_id': post.id})
         
         return comment
     except Post.DoesNotExist:

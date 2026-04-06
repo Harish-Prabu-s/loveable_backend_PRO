@@ -111,12 +111,13 @@ def like_view(request, post_id: int):
 @permission_classes([IsAuthenticated])
 def comment_view(request, post_id: int):
     text = request.data.get('text', '').strip()
+    reply_to_id = request.data.get('reply_to_id')
     if not text:
         return Response({'error': 'text required'}, status=400)
     
     try:
         from .services import add_comment
-        comment = add_comment(post_id, request.user, text)
+        comment = add_comment(post_id, request.user, text, reply_to_id)
         if not comment:
             return Response({'error': 'post not found'}, status=404)
         return Response({'success': True, 'id': comment.id}, status=201)
@@ -153,18 +154,30 @@ def list_comments_view(request, post_id: int):
     try:
         post = Post.objects.get(pk=post_id)
         comments = post.comments.all().select_related('user__profile').order_by('-created_at')
-        data = []
+        
+        comment_dict = {}
+        root_comments = []
+        
         for c in comments:
             p = getattr(c.user, 'profile', None)
-            data.append({
+            comment_dict[c.id] = {
                 'id': c.id,
                 'user': c.user.id,
                 'display_name': p.display_name if p else '',
                 'photo': get_absolute_media_url(p.photo, request) if p and p.photo else None,
                 'text': c.text,
                 'created_at': c.created_at.isoformat(),
-            })
-        return Response(data)
+                'reply_to': c.reply_to_id,
+                'replies': []
+            }
+            
+        for c in comments:
+            if c.reply_to_id and c.reply_to_id in comment_dict:
+                comment_dict[c.reply_to_id]['replies'].append(comment_dict[c.id])
+            else:
+                root_comments.append(comment_dict[c.id])
+                
+        return Response(root_comments)
     except Post.DoesNotExist:
         return Response({'error': 'post not found'}, status=404)
 
