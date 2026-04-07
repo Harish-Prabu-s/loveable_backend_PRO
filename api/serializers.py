@@ -1,11 +1,12 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 from django.conf import settings
+from django.utils import timezone
 from .models import (
     Profile, Wallet, CoinTransaction, Payment, Withdrawal,
     Game, LevelProgress, Offer, LeagueTier, CallSession,
     Badge, DailyReward, Room, Message, Story, Gift, GiftTransaction, StoryView, Follow, Reel, Streak, Post, PostLike,
-    CloseFriend, PostView, ReelView, StreakView, StreakUpload, MessageReaction
+    CloseFriend, PostView, ReelView, StreakView, StreakUpload, MessageReaction, Note
 )
 from .utils import get_absolute_media_url
 
@@ -198,26 +199,40 @@ class RoomSerializer(serializers.ModelSerializer):
     caller_profile = SimpleUserSerializer(source='caller', read_only=True)
     receiver_profile = SimpleUserSerializer(source='receiver', read_only=True)
     group_avatar = serializers.SerializerMethodField()
+    collage_photos = serializers.SerializerMethodField()
 
     class Meta:
         model = Room
-        fields = ['id', 'caller', 'receiver', 'caller_profile', 'receiver_profile', 'call_type', 'status', 'started_at', 'ended_at', 'duration_seconds', 'coins_spent', 'created_at', 'chat_theme', 'disappearing_messages_enabled', 'disappearing_timer', 'is_group', 'name', 'group_avatar', 'is_archived']
+        fields = ['id', 'caller', 'receiver', 'caller_profile', 'receiver_profile', 'call_type', 'status', 'started_at', 'ended_at', 'duration_seconds', 'coins_spent', 'created_at', 'chat_theme', 'disappearing_messages_enabled', 'disappearing_timer', 'is_group', 'name', 'group_avatar', 'collage_photos', 'is_archived']
 
     def get_group_avatar(self, obj):
         request = self.context.get('request')
-        # If explicit avatar exists, use it
         if obj.group_avatar:
             return get_absolute_media_url(obj.group_avatar, request)
-        
-        # If group, try last message sender's photo
-        if obj.is_group:
-            last_msg = obj.messages.order_by('-created_at').first()
-            if last_msg and last_msg.sender:
-                profile = getattr(last_msg.sender, 'profile', None)
-                if profile and profile.photo:
-                    return get_absolute_media_url(profile.photo, request)
-        
         return None
+
+    def get_collage_photos(self, obj):
+        if not obj.is_group:
+            return []
+        
+        request = self.context.get('request')
+        from django.contrib.auth.models import User
+        # Get last 4 unique senders from messages
+        sender_ids = obj.messages.order_by('-created_at').values_list('sender_id', flat=True)
+        seen = set()
+        photos = []
+        for sid in sender_ids:
+            if sid not in seen:
+                seen.add(sid)
+                try:
+                    user = User.objects.get(id=sid)
+                    if user.profile and user.profile.photo:
+                        photos.append(get_absolute_media_url(user.profile.photo, request))
+                except:
+                    pass
+            if len(photos) >= 4:
+                break
+        return photos
 
 class MessageReactionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -420,12 +435,48 @@ class ContactSerializer(serializers.Serializer):
     unread_count = serializers.IntegerField(default=0)
     streak_count = serializers.IntegerField(default=0)
     streak_last_interaction = serializers.DateTimeField(required=False, allow_null=True)
+    current_note = serializers.SerializerMethodField()
     
     # Group Fields
     is_group = serializers.BooleanField(default=False)
     room_id = serializers.IntegerField()
     name = serializers.CharField(required=False, allow_null=True)
     group_avatar = serializers.CharField(required=False, allow_null=True)
+    collage_photos = serializers.SerializerMethodField()
+
+    def get_collage_photos(self, obj):
+        if not getattr(obj, 'is_group', False):
+            return []
+        # obj in ContactSerializer might be a room-like object or user-like
+        # We need to get the room and its messages
+        try:
+            from .models import Room
+            room = Room.objects.get(id=obj.room_id)
+            return RoomSerializer(context=self.context).get_collage_photos(room)
+        except:
+            return []
+
+    def get_current_note(self, obj):
+        if getattr(obj, 'is_group', False):
+            return None
+        
+        user_id = getattr(obj, 'id', None)
+        if not user_id:
+            return None
+            
+        try:
+            from .models import Note
+            note = Note.objects.filter(user_id=user_id).first()
+            if note and (not note.expires_at or note.expires_at > timezone.now()):
+                return {
+                    'text': note.text,
+                    'audio_title': note.audio.title if note.audio else None,
+                    'audio_url': get_absolute_media_url(note.audio.file_url, self.context.get('request')) if note.audio else None,
+                    'created_at': note.created_at
+                }
+        except:
+            pass
+        return None
 
     def get_display_name(self, obj):
         if getattr(obj, 'is_group', False):
