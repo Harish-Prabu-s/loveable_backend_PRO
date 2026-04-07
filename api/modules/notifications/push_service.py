@@ -401,4 +401,39 @@ def send_call_push_notification(caller_name: str, callee_id: int, session_id: in
         'callType': call_type,
     }
 
-    return send_push_notification(tokens, title='Incoming Call', body=message, data=data)
+    messages = []
+    for token in tokens:
+        messages.append({
+            'to': token,
+            'sound': 'default',
+            'title': 'Incoming Call 📞',
+            'body': message,
+            'priority': 'high',
+            '_displayInForeground': True,
+            'data': data,
+            'channelId': 'incoming-calls',  # Android notification channel
+        })
+
+    if not messages:
+        return {'sent': 0, 'errors': 0}
+
+    import requests as _req
+    try:
+        resp = _req.post(
+            EXPO_PUSH_URL,
+            json=messages,
+            headers={
+                'Accept': 'application/json',
+                'Accept-encoding': 'gzip, deflate',
+                'Content-Type': 'application/json',
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data_resp = resp.json().get('data', [])
+        sent = sum(1 for item in data_resp if item.get('status') == 'ok')
+        errors = len(data_resp) - sent
+        return {'sent': sent, 'errors': errors}
+    except Exception as exc:
+        logger.error('Failed to send call push: %s', exc)
+        return {'sent': 0, 'errors': len(messages)}
