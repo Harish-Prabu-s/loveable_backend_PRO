@@ -58,12 +58,43 @@ def list_comments(request, upload_id):
         return Response({'error': 'Streak not found'}, status=404)
     
     from ...serializers import ProfileSerializer
+    from ...utils import get_absolute_media_url
     return Response([{
         'id': c.id,
         'user': ProfileSerializer(c.user.profile, context={'request': request}).data,
+        'user_display_name': getattr(c.user.profile, 'display_name', c.user.username),
+        'user_avatar': get_absolute_media_url(c.user.profile.photo, request) if c.user.profile and c.user.profile.photo else None,
         'text': c.text,
-        'created_at': c.created_at
+        'created_at': c.created_at,
+        'likes_count': c.likes.count(),
+        'is_liked': c.likes.filter(id=request.user.id).exists()
     } for c in comments])
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_comment_like(request, comment_id):
+    from ...models import StreakComment
+    try:
+        comment = StreakComment.objects.get(pk=comment_id)
+        if request.user in comment.likes.all():
+            comment.likes.remove(request.user)
+            liked = False
+        else:
+            comment.likes.add(request.user)
+            liked = True
+            # Notify owner
+            if comment.user != request.user:
+                from ..notifications.services import create_notification
+                create_notification(
+                    recipient=comment.user,
+                    actor=request.user,
+                    notification_type='streak_comment_like',
+                    message=f"{request.user.username} liked your streak comment!",
+                    object_id=comment.streak_upload.id
+                )
+        return Response({'liked': liked, 'likes_count': comment.likes.count()})
+    except StreakComment.DoesNotExist:
+        return Response({'error': 'Comment not found'}, status=404)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_streak_upload(request, upload_id):

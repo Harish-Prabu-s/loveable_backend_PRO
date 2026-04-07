@@ -1,6 +1,6 @@
 from api.modules.streaks.controllers import view_streaks, toggle_user_fire, streak_leaderboard_view, view_streak_view, \
     repost_streak_view, view_streaks_snapchat, upload_streak, get_streak_upload, toggle_like, list_comments, \
-    add_comment, toggle_fire
+    add_comment, toggle_fire, toggle_comment_like
 from django.urls import path
 urlpatterns = [
     path('', view_streaks),
@@ -13,6 +13,7 @@ urlpatterns = [
     path('<int:upload_id>/comments/', list_comments, name='streak-comments-list'),
     path('<int:upload_id>/like/', toggle_like, name='streak-like'),
     path('<int:upload_id>/fire/', toggle_fire, name='streak-fire'),
+    path('comment/<int:comment_id>/like/', toggle_comment_like, name='streak-comment-like'),
     path('user/<int:user_id>/fire/', toggle_user_fire, name='user-fire'),
     path('leaderboard/', streak_leaderboard_view, name='streak-leaderboard'),
 ]
