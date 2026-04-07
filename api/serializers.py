@@ -42,6 +42,7 @@ class SimpleUserSerializer(serializers.ModelSerializer):
         return None
 
 class ProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
     is_following = serializers.SerializerMethodField()
     is_close_friend = serializers.SerializerMethodField()
     followers_count = serializers.SerializerMethodField()
@@ -55,7 +56,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = [
-            'id', 'user', 'phone_number', 'gender', 'is_verified', 'is_online', 'is_busy',
+            'id', 'user', 'username', 'phone_number', 'gender', 'is_verified', 'is_online', 'is_busy',
             'date_joined', 'last_login', 'email', 'display_name', 'bio', 'photo',
             'interests', 'age', 'location', 'language', 'app_lock_enabled',
             'created_at', 'updated_at', 'is_following', 'is_close_friend', 'followers_count', 'following_count',
