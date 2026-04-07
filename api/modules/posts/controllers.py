@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from django.conf import settings
 from .services import get_feed, create_post, toggle_like, delete_post
 from ...models import PostLike
+from ..hashtags.controllers import sync_hashtags
 
 
 from ...utils import get_absolute_media_url
@@ -47,7 +48,8 @@ def _serialize_post(post, request_user, request=None):
             'username': u.username,
             'display_name': getattr(u, 'profile', u).display_name if hasattr(u, 'profile') else u.username,
             'photo': get_absolute_media_url(u.profile.photo, request) if hasattr(u, 'profile') and u.profile.photo else None,
-        } for u in post.mentions.all()]
+        } for u in post.mentions.all()],
+        'images': [get_absolute_media_url(img.image, request) for img in post.images.all()]
     }
 
 
@@ -88,7 +90,11 @@ def create_post_view(request):
             except:
                 mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
         
-        post = create_post(request.user, caption, image, visibility, mentions=mentions)
+        # Handle multiple images
+        additional_images = request.FILES.getlist('images')
+        
+        post = create_post(request.user, caption, image, visibility, mentions=mentions, additional_images=additional_images)
+        sync_hashtags(caption, post)
         return Response(_serialize_post(post, request.user, request), status=201)
     except Exception as e:
         import traceback

@@ -196,18 +196,28 @@ def contact_list_view(request):
             
             contacts_data.append(other_user)
 
-        # Handle Group Rooms (map to dummy objects)
         from types import SimpleNamespace
         for room in group_rooms:
             last_msg = room.latest_msgs[0] if room.latest_msgs else None
             
+            # Dynamically set group avatar to last sender's avatar if available
+            dynamic_avatar = room.group_avatar
+            if last_msg and last_msg.sender_id:
+                try:
+                    from ...models import UserProfile
+                    sender_prof = UserProfile.objects.get(user_id=last_msg.sender_id)
+                    if sender_prof.photo:
+                        dynamic_avatar = sender_prof.photo.url
+                except Exception:
+                    pass
+
             group_contact = SimpleNamespace(
                 id=room.id,
                 username=f"group_{room.id}",
                 is_group=True,
                 room_id=room.id,
                 name=room.name,
-                group_avatar=room.group_avatar,
+                group_avatar=dynamic_avatar,
                 last_message=last_msg.content if last_msg else "Start chatting...",
                 last_message_type=last_msg.type if last_msg else "text",
                 last_timestamp=last_msg.created_at if last_msg else room.created_at,

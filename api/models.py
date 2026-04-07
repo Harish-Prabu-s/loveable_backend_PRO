@@ -3,13 +3,45 @@ from django.db import models
 from django.utils import timezone
 from decimal import Decimal
 
+# ── Hashtag System ──────────────────────────────────────────────────────────
+
+class Hashtag(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    usage_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"#{self.name}"
+
+
+# ── Audio Library ────────────────────────────────────────────────────────────
+
+class Audio(models.Model):
+    title = models.CharField(max_length=255, default='Original Audio')
+    artist = models.CharField(max_length=255, null=True, blank=True)
+    file_url = models.FileField(upload_to='audios/')
+    cover_image_url = models.URLField(max_length=500, null=True, blank=True)
+    duration_ms = models.IntegerField(default=0)
+    is_trending = models.BooleanField(default=False)
+    language = models.CharField(max_length=50, default='English') # Tamil, English, etc.
+    shazam_id = models.CharField(max_length=100, null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_audios')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.title} by {self.artist or 'Unknown'}"
+
+
+# ── Social Media Models ──────────────────────────────────────────────────────
+
 class Post(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='api_posts')
     caption = models.TextField(blank=True)
     image = models.ImageField(upload_to='posts/', null=True, blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_posts', blank=True)
-    audio = models.ForeignKey('Audio', on_delete=models.SET_NULL, null=True, blank=True, related_name='posts')
+    audio = models.ForeignKey(Audio, on_delete=models.SET_NULL, null=True, blank=True, related_name='posts')
+    hashtags = models.ManyToManyField(Hashtag, related_name='posts', blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -373,6 +405,7 @@ class StreakUpload(models.Model):
     caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_streaks', blank=True)
+    hashtags = models.ManyToManyField(Hashtag, related_name='streak_uploads', blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -462,6 +495,7 @@ class Story(models.Model):
     caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_stories', blank=True)
+    hashtags = models.ManyToManyField(Hashtag, related_name='stories', blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     created_at = models.DateTimeField(default=timezone.now)
     expires_at = models.DateTimeField(null=True, blank=True)
@@ -477,17 +511,6 @@ class StoryView(models.Model):
     class Meta:
         unique_together = ('story', 'viewer')
 
-class Audio(models.Model):
-    title = models.CharField(max_length=255, default='Original Audio')
-    artist = models.CharField(max_length=255, null=True, blank=True)
-    cover_image_url = models.URLField(max_length=500, null=True, blank=True)
-    file_url = models.FileField(upload_to='audios/')
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_audios')
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"{self.title} by {self.artist or 'Unknown'}"
-
 class Reel(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reels')
     video_url = models.FileField(upload_to='reels/')
@@ -495,6 +518,7 @@ class Reel(models.Model):
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_reels', blank=True)
     audio = models.ForeignKey(Audio, on_delete=models.SET_NULL, null=True, blank=True, related_name='reels')
+    hashtags = models.ManyToManyField(Hashtag, related_name='reels', blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     is_archived = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -666,3 +690,30 @@ class UserRelationship(models.Model):
         unique_together = ('user_one', 'user_two')
 
 
+# ── Notes Feature ───────────────────────────────────────────────────────────
+
+class Note(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='note')
+    text = models.CharField(max_length=60, blank=True)
+    audio = models.ForeignKey(Audio, on_delete=models.SET_NULL, null=True, blank=True, related_name='notes')
+    audio_start_sec = models.IntegerField(default=0)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Note by {self.user.username}: {self.text[:30]}"
+
+
+# ── Multi-Image Posts ────────────────────────────────────────────────────────
+
+class PostImage(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='images')
+    image = models.ImageField(upload_to='posts/')
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"Image #{self.order} for Post #{self.post_id}"

@@ -8,6 +8,7 @@ from .services import (
     get_reel_comments, share_reel_to_chat, delete_reel_service,
     get_reel_by_id
 )
+from ..hashtags.controllers import sync_hashtags
 from django.core.files.storage import FileSystemStorage
 from django.conf import settings
 from ...utils import strip_base_url
@@ -70,6 +71,7 @@ def create_reel_view(request):
             
     relative_video_path = strip_base_url(video_url) if video_url else ''
     reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions, audio_id=audio_id, audio_meta=audio_meta)
+    sync_hashtags(caption, reel)
     return Response(ReelSerializer(reel, context={'request': request}).data, status=201)
 
 @api_view(['POST'])

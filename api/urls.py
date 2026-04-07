@@ -31,6 +31,8 @@ urlpatterns = [
     path('league/', include('api.modules.league.urls')),
     path('levels/', include('api.modules.levels.urls')),
     path('monetization/', include('api.modules.monetization.urls')),
+    path('hashtags/', include('api.modules.hashtags.urls')),
+    path('notes/', include('api.modules.notes.urls')),
 
     # Legacy endpoints remain accessible if needed
     path('health/', views.health_check),
