@@ -164,6 +164,10 @@ def comment_reel_view(request, pk):
                 body=f"{sender_name} replied to your comment: {text[:30]}...",
                 data={'type': 'reel_comment', 'reel_id': reel.id}
             )
+            
+    # Handle Mentions
+    from ..notifications.utils import handle_mentions
+    handle_mentions(text, request.user, 'reel_comment', comment.reel.id, obj=comment)
 
     return Response({'success': True, 'id': comment.id})
 
@@ -187,8 +191,8 @@ def list_comments_view(request, pk: int):
         comment_dict[c.id] = {
             'id': c.id,
             'user': c.user.id,
-            'display_name': p.display_name if p else '',
-            'photo': get_absolute_media_url(p.photo, request) if p and p.photo else None,
+            'user_display_name': p.display_name if p else c.user.username,
+            'user_avatar': get_absolute_media_url(p.photo, request) if p and p.photo else None,
             'text': c.text,
             'likes_count': c.likes.count(),
             'is_liked': c.likes.filter(id=request.user.id).exists() if request.user.is_authenticated else False,
@@ -204,6 +208,33 @@ def list_comments_view(request, pk: int):
             root_comments.append(comment_dict[c.id])
             
     return Response(root_comments)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_reel_comment_like_view(request, comment_id):
+    from ...models import ReelComment
+    try:
+        comment = ReelComment.objects.get(pk=comment_id)
+        if request.user in comment.likes.all():
+            comment.likes.remove(request.user)
+            liked = False
+        else:
+            comment.likes.add(request.user)
+            liked = True
+            # Notify owner
+            if comment.user != request.user:
+                from ..notifications.push_service import send_push_notification, _get_user_tokens
+                from ..notifications.services import create_notification
+                create_notification(
+                    recipient=comment.user,
+                    actor=request.user,
+                    notification_type='reel_comment_like',
+                    message=f"{request.user.username} liked your comment on a reel!",
+                    object_id=comment.reel.id
+                )
+        return Response({'liked': liked, 'likes_count': comment.likes.count()})
+    except ReelComment.DoesNotExist:
+        return Response({'error': 'Comment not found'}, status=404)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
