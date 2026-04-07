@@ -44,6 +44,10 @@ def add_comment(request, upload_id):
     if not comment:
         return Response({'error': 'Comment could not be added'}, status=400)
     
+    # Handle Mentions
+    from ..notifications.utils import handle_mentions
+    handle_mentions(text, request.user, 'streak_comment', upload_id, obj=comment)
+    
     return Response({'status': 'Comment added', 'id': comment.id})
 
 @api_view(['GET'])

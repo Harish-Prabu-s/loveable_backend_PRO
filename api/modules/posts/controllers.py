@@ -120,6 +120,11 @@ def comment_view(request, post_id: int):
         comment = add_comment(post_id, request.user, text, reply_to_id)
         if not comment:
             return Response({'error': 'post not found'}, status=404)
+        
+        # Handle Mentions
+        from ..notifications.utils import handle_mentions
+        handle_mentions(text, request.user, 'comment', post_id, obj=comment)
+        
         return Response({'success': True, 'id': comment.id}, status=201)
     except Exception as e:
         return Response({'error': str(e)}, status=500)
@@ -143,6 +148,32 @@ def share_post_view(request, post_id: int):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_comment_like_view(request, comment_id: int):
+    from ...models import PostComment
+    try:
+        comment = PostComment.objects.get(pk=comment_id)
+        if request.user in comment.likes.all():
+            comment.likes.remove(request.user)
+            liked = False
+        else:
+            comment.likes.add(request.user)
+            liked = True
+            # Notify owner
+            if comment.user != request.user:
+                from ..notifications.services import create_notification
+                create_notification(
+                    recipient=comment.user,
+                    actor=request.user,
+                    notification_type='comment_like',
+                    message=f"{request.user.username} liked your comment!",
+                    object_id=comment.post.id
+                )
+        return Response({'liked': liked, 'likes_count': comment.likes.count()})
+    except PostComment.DoesNotExist:
+        return Response({'error': 'comment not found'}, status=404)
+
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
@@ -163,12 +194,16 @@ def list_comments_view(request, post_id: int):
             comment_dict[c.id] = {
                 'id': c.id,
                 'user': c.user.id,
+                'user_display_name': p.display_name if p else c.user.username,
                 'display_name': p.display_name if p else '',
+                'user_avatar': get_absolute_media_url(p.photo, request) if p and p.photo else None,
                 'photo': get_absolute_media_url(p.photo, request) if p and p.photo else None,
                 'text': c.text,
                 'created_at': c.created_at.isoformat(),
                 'reply_to': c.reply_to_id,
-                'replies': []
+                'replies': [],
+                'likes_count': c.likes.count(),
+                'is_liked': c.likes.filter(id=request.user.id).exists()
             }
             
         for c in comments:
