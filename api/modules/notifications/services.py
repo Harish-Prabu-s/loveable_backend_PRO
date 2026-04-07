@@ -3,7 +3,7 @@ from ...models import Notification, FollowRequest, Follow, Profile, CloseFriend
 from django.contrib.auth.models import User
 
 
-def create_notification(recipient: User, actor: User, notification_type: str, message: str = '', object_id: int = None):
+def create_notification(recipient: User, actor: User, notification_type: str, message: str = '', object_id: int = None, metadata: dict = None):
     """Central function to create a notification for a user."""
     # Don't notify yourself
     if recipient == actor:
@@ -14,6 +14,7 @@ def create_notification(recipient: User, actor: User, notification_type: str, me
         notification_type=notification_type,
         message=message,
         object_id=object_id,
+        metadata=metadata,
     )
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
@@ -34,6 +35,7 @@ def create_notification(recipient: User, actor: User, notification_type: str, me
                             'notification_type': notif.notification_type,
                             'message': notif.message,
                             'object_id': notif.object_id,
+                            'metadata': notif.metadata,
                             'is_read': notif.is_read,
                             'created_at': notif.created_at.isoformat(),
                             'actor': {

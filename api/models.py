@@ -114,6 +114,7 @@ class Notification(models.Model):
     notification_type = models.CharField(max_length=50)
     message = models.TextField(blank=True)
     object_id = models.IntegerField(null=True, blank=True)
+    metadata = models.JSONField(null=True, blank=True)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 

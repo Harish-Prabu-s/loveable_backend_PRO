@@ -47,6 +47,7 @@ def list_notifications(request):
             'message': n.message,
             'is_read': n.is_read,
             'object_id': n.object_id,
+            'metadata': n.metadata,
             'request_status': request_status,
             'created_at': n.created_at,
             'actor': {

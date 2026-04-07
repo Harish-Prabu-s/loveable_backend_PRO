@@ -57,6 +57,11 @@ def handle_mentions(text, actor, content_type, object_id, request=None, obj=None
     content_label = content_type.replace('_', ' ')
     
     for target_user in final_users:
+        # Determine metadata for advanced routing
+        notif_metadata = {}
+        if obj:
+            notif_metadata['comment_id'] = getattr(obj, 'id', None)
+            
         # 1. Database Notification
         notif_type = f"mention_{content_type}"
         create_notification(
@@ -64,7 +69,8 @@ def handle_mentions(text, actor, content_type, object_id, request=None, obj=None
             actor=actor,
             notification_type=notif_type,
             message=f"{sender_name} mentioned you in a {content_label}.",
-            object_id=object_id
+            object_id=object_id,
+            metadata=notif_metadata
         )
 
         # 2. Push Notification
@@ -74,15 +80,19 @@ def handle_mentions(text, actor, content_type, object_id, request=None, obj=None
                 'type': 'mention',
                 'mention_type': content_type,
                 'actor_id': actor.id,
-                'object_id': object_id
+                'object_id': object_id,
             }
+            if obj and hasattr(obj, 'id'):
+                payload['comment_id'] = obj.id
+                
             if content_type == 'post': payload['post_id'] = object_id
             elif content_type == 'reel': payload['reel_id'] = object_id
             elif content_type == 'story': payload['story_id'] = object_id
             elif content_type == 'streak': payload['streak_id'] = object_id
-            elif content_type == 'comment': payload['post_id'] = object_id 
+            elif content_type == 'post_comment' or content_type == 'comment': payload['post_id'] = object_id 
             elif content_type == 'reel_comment': payload['reel_id'] = object_id
             elif content_type == 'story_comment': payload['story_id'] = object_id
+            elif content_type == 'streak_comment': payload['streak_id'] = object_id
 
             send_push_notification(
                 tokens,
@@ -100,18 +110,18 @@ def handle_mentions(text, actor, content_type, object_id, request=None, obj=None
             share_type = 'text'
             share_content = f"I mentioned you in a {content_label}! Check it out."
             
-            if content_type == 'post':
+            if content_type in ('post', 'post_comment', 'comment'):
                 share_type = 'post_share'
-                share_content = f"I mentioned you in a post! Check it out. [POST_SHARE:{object_id}]"
-            elif content_type == 'reel':
+                share_content = f"I mentioned you in a post! Check it out. [POST_SHARE:{object_id}:{getattr(obj, 'id', '')}]"
+            elif content_type in ('reel', 'reel_comment'):
                 share_type = 'reel_share'
-                share_content = f"I mentioned you in a reel! Check it out. [REEL_SHARE:{object_id}]"
-            elif content_type == 'story':
+                share_content = f"I mentioned you in a reel! Check it out. [REEL_SHARE:{object_id}:{getattr(obj, 'id', '')}]"
+            elif content_type in ('story', 'story_comment'):
                 share_type = 'story_share'
-                share_content = f"I mentioned you in a story! Check it out. [STORY_SHARE:{object_id}]"
-            elif content_type == 'streak':
+                share_content = f"I mentioned you in a story! Check it out. [STORY_SHARE:{object_id}:{getattr(obj, 'id', '')}]"
+            elif content_type in ('streak', 'streak_comment'):
                 share_type = 'streak_share'
-                share_content = f"I mentioned you in a streak! Check it out. [STREAK_SHARE:{object_id}]"
+                share_content = f"I mentioned you in a streak! Check it out. [STREAK_SHARE:{object_id}:{getattr(obj, 'id', '')}]"
             
             send_message(room.id, actor, share_content, share_type)
         except Exception as e:
