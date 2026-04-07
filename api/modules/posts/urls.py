@@ -1,6 +1,6 @@
 from django.urls import path
 from .controllers import (
-    feed_view, create_post_view, like_view, delete_post_view, comment_view,
+    feed_view, create_post_view, like_view, post_detail_view, comment_view,
     list_comments_view, share_post_view, repost_view, view_post_view,
 )
 
@@ -15,5 +15,5 @@ urlpatterns = [
     path('<int:post_id>/comment/add/', comment_view),
     path('<int:post_id>/share/', share_post_view),
     path('<int:post_id>/repost/', repost_view),
-    path('<int:post_id>/', delete_post_view),
+    path('<int:post_id>/', post_detail_view, name='post-detail'),
 ]

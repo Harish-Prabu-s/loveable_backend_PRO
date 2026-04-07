@@ -181,13 +181,23 @@ def list_comments_view(request, post_id: int):
     except Post.DoesNotExist:
         return Response({'error': 'post not found'}, status=404)
 
-@api_view(['DELETE'])
+@api_view(['GET', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def delete_post_view(request, post_id: int):
-    deleted = delete_post(post_id, request.user)
-    if not deleted:
-        return Response({'error': 'post not found or permission denied'}, status=404)
-    return Response(status=204)
+def post_detail_view(request, post_id: int):
+    from ...models import Post
+    try:
+        post = Post.objects.get(pk=post_id)
+        if request.method == 'GET':
+            return Response(_serialize_post(post, request.user, request))
+        
+        # DELETE logic
+        if post.user != request.user:
+            return Response({'error': 'permission denied'}, status=403)
+        
+        post.delete()
+        return Response(status=204)
+    except Post.DoesNotExist:
+        return Response({'error': 'post not found'}, status=404)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
