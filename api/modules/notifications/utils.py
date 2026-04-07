@@ -101,28 +101,67 @@ def handle_mentions(text, actor, content_type, object_id, request=None, obj=None
                 data=payload
             )
 
-        # 3. Chat Alert (Automatic Share)
+        # 3. Chat Alert (Automatic Share with Media Preview)
         try:
             # Get or create room (using 'audio' as default for 1v1)
             room = get_or_create_room(actor, target_user.id, 'audio')
-            
-            # Map content_type to chat message type and content format
+
+            # ── Resolve the media preview URL ────────────────────────────────
+            preview_url = None
+            try:
+                def abs_url(field):
+                    if not field:
+                        return None
+                    url = field.url if hasattr(field, 'url') else str(field)
+                    if url.startswith('http'):
+                        return url
+                    from django.conf import settings
+                    host = getattr(settings, 'SITE_URL', 'https://loveable.sbs')
+                    media_prefix = getattr(settings, 'MEDIA_URL', '/media/')
+                    if url.startswith(media_prefix):
+                        return f"{host}{url}"
+                    return f"{host}{media_prefix}{url.lstrip('/')}"
+
+                # Resolve parent object (comments reference their parent)
+                parent_obj = obj
+                if content_type in ('post_comment', 'comment'):
+                    parent_obj = getattr(obj, 'post', None)
+                elif content_type == 'reel_comment':
+                    parent_obj = getattr(obj, 'reel', None)
+                elif content_type == 'story_comment':
+                    parent_obj = getattr(obj, 'story', None)
+                elif content_type == 'streak_comment':
+                    parent_obj = getattr(obj, 'streak_upload', None)
+
+                if parent_obj:
+                    for attr in ('image', 'thumbnail', 'media_url', 'video_url'):
+                        field = getattr(parent_obj, attr, None)
+                        if field:
+                            preview_url = abs_url(field)
+                            break
+            except Exception as preview_err:
+                print(f"[Mention] Could not resolve preview URL: {preview_err}")
+
+            # ── Map content_type to chat share type ──────────────────────────
             share_type = 'text'
-            share_content = f"I mentioned you in a {content_label}! Check it out."
-            
+            comment_id_part = getattr(obj, 'id', '') if obj else ''
+
             if content_type in ('post', 'post_comment', 'comment'):
                 share_type = 'post_share'
-                share_content = f"I mentioned you in a post! Check it out. [POST_SHARE:{object_id}:{getattr(obj, 'id', '')}]"
+                share_content = f"I mentioned you in a post! [POST_SHARE:{object_id}:{comment_id_part}]"
             elif content_type in ('reel', 'reel_comment'):
                 share_type = 'reel_share'
-                share_content = f"I mentioned you in a reel! Check it out. [REEL_SHARE:{object_id}:{getattr(obj, 'id', '')}]"
+                share_content = f"I mentioned you in a reel! [REEL_SHARE:{object_id}:{comment_id_part}]"
             elif content_type in ('story', 'story_comment'):
                 share_type = 'story_share'
-                share_content = f"I mentioned you in a story! Check it out. [STORY_SHARE:{object_id}:{getattr(obj, 'id', '')}]"
+                share_content = f"I mentioned you in a story! [STORY_SHARE:{object_id}:{comment_id_part}]"
             elif content_type in ('streak', 'streak_comment'):
                 share_type = 'streak_share'
-                share_content = f"I mentioned you in a streak! Check it out. [STREAK_SHARE:{object_id}:{getattr(obj, 'id', '')}]"
-            
-            send_message(room.id, actor, share_content, share_type)
+                share_content = f"I mentioned you in a streak! [STREAK_SHARE:{object_id}:{comment_id_part}]"
+            else:
+                share_content = f"I mentioned you in a {content_label}! Check it out."
+
+            send_message(room.id, actor, share_content, share_type, media_url=preview_url)
         except Exception as e:
             print(f"Error sending mention chat alert: {e}")
+
