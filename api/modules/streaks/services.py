@@ -413,6 +413,7 @@ def get_streaks_list_service(user: User, view_type: str = 'friends', request=Non
                 for up in ups:
                     has_liked = StreakLike.objects.filter(streak_upload=up, user=user).exists()
                     has_fired = StreakReaction.objects.filter(streak_upload=up, user=user, reaction_type='fire').exists()
+                    mention_ids = list(up.mentions.values_list('id', flat=True))
                     media_list.append({
                         'id': up.id,
                         'media_url': get_absolute_media_url(up.media_url, request),
@@ -421,6 +422,7 @@ def get_streaks_list_service(user: User, view_type: str = 'friends', request=Non
                         'comments_count': up.comments.count(),
                         'has_liked': has_liked,
                         'has_fired': has_fired,
+                        'mentions': mention_ids,
                         'created_at': up.created_at
                     })
                 
@@ -441,10 +443,13 @@ def get_streaks_list_service(user: User, view_type: str = 'friends', request=Non
         return []
 
 def repost_streak(user, original_streak_id):
-    """Create a repost of an existing streak upload."""
+    """Create a repost of an existing streak upload if user is mentioned."""
     try:
         from ...models import StreakUpload
         original = StreakUpload.objects.get(id=original_streak_id)
+        if not original.mentions.filter(id=user.id).exists() and original.user != user:
+            return None
+            
         repost = StreakUpload.objects.create(
             user=user,
             media_url=original.media_url,
