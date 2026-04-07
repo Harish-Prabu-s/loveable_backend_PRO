@@ -197,10 +197,27 @@ class DailyRewardSerializer(serializers.ModelSerializer):
 class RoomSerializer(serializers.ModelSerializer):
     caller_profile = SimpleUserSerializer(source='caller', read_only=True)
     receiver_profile = SimpleUserSerializer(source='receiver', read_only=True)
+    group_avatar = serializers.SerializerMethodField()
 
     class Meta:
         model = Room
         fields = ['id', 'caller', 'receiver', 'caller_profile', 'receiver_profile', 'call_type', 'status', 'started_at', 'ended_at', 'duration_seconds', 'coins_spent', 'created_at', 'chat_theme', 'disappearing_messages_enabled', 'disappearing_timer', 'is_group', 'name', 'group_avatar', 'is_archived']
+
+    def get_group_avatar(self, obj):
+        request = self.context.get('request')
+        # If explicit avatar exists, use it
+        if obj.group_avatar:
+            return get_absolute_media_url(obj.group_avatar, request)
+        
+        # If group, try last message sender's photo
+        if obj.is_group:
+            last_msg = obj.messages.order_by('-created_at').first()
+            if last_msg and last_msg.sender:
+                profile = getattr(last_msg.sender, 'profile', None)
+                if profile and profile.photo:
+                    return get_absolute_media_url(profile.photo, request)
+        
+        return None
 
 class MessageReactionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -440,12 +457,13 @@ class PostSerializer(serializers.ModelSerializer):
     is_liked = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     aspect_ratio = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
             'id', 'user', 'profile_id', 'display_name', 'username', 'photo', 'gender',
-            'caption', 'image', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner',
+            'caption', 'image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner',
             'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio'
         ]
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
@@ -494,6 +512,19 @@ class PostSerializer(serializers.ModelSerializer):
             return obj.image.width / obj.image.height
         except Exception:
             return 1.0
+
+    def get_images(self, obj):
+        request = self.context.get('request')
+        imgs = []
+        if obj.image:
+            imgs.append(get_absolute_media_url(obj.image, request))
+        
+        from .models import PostImage
+        post_imgs = PostImage.objects.filter(post=obj).order_by('order')
+        for pi in post_imgs:
+            if pi.image:
+                imgs.append(get_absolute_media_url(pi.image, request))
+        return imgs
 
 class CloseFriendSerializer(serializers.ModelSerializer):
     close_friend = SimpleUserSerializer()
