@@ -9,7 +9,7 @@ from .models import (
     CloseFriend, PostView, ReelView, StreakView, StreakUpload, MessageReaction, Note,
     Highlight, HighlightStory, Collection, SavedItem, FavoriteAudio
 )
-from .utils import get_absolute_media_url, time_ago
+from .utils import get_absolute_media_url
 from .models import Audio
 
 class AudioSerializer(serializers.ModelSerializer):
