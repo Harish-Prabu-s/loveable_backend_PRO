@@ -6,9 +6,34 @@ from .models import (
     Profile, Wallet, CoinTransaction, Payment, Withdrawal,
     Game, LevelProgress, Offer, LeagueTier, CallSession,
     Badge, DailyReward, Room, Message, Story, Gift, GiftTransaction, StoryView, Follow, Reel, Streak, Post, PostLike,
-    CloseFriend, PostView, ReelView, StreakView, StreakUpload, MessageReaction, Note
+    CloseFriend, PostView, ReelView, StreakView, StreakUpload, MessageReaction, Note,
+    Highlight, HighlightStory, Collection, SavedItem, FavoriteAudio
 )
-from .utils import get_absolute_media_url
+from .utils import get_absolute_media_url, time_ago
+from .models import Audio
+
+class AudioSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+    cover_image_url = serializers.SerializerMethodField()
+    is_favorite = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Audio
+        fields = ['id', 'title', 'artist', 'file_url', 'cover_image_url', 'duration_ms', 'is_trending', 'language', 'category', 'is_favorite']
+
+    def get_is_favorite(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return FavoriteAudio.objects.filter(user=request.user, audio=obj).exists()
+        return False
+
+    def get_file_url(self, obj):
+        request = self.context.get('request')
+        return get_absolute_media_url(obj.file_url, request)
+
+    def get_cover_image_url(self, obj):
+        request = self.context.get('request')
+        return get_absolute_media_url(obj.cover_image_url, request)
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -52,7 +77,8 @@ class ProfileSerializer(serializers.ModelSerializer):
     photo = serializers.SerializerMethodField()
     is_busy = serializers.SerializerMethodField()
     phone_number = serializers.SerializerMethodField()
-    email = serializers.SerializerMethodField()
+    email = serializers.EmailField(read_only=True)
+    highlights = HighlightSerializer(many=True, read_only=True)
 
     class Meta:
         model = Profile
@@ -61,7 +87,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             'date_joined', 'last_login', 'email', 'display_name', 'bio', 'photo',
             'interests', 'age', 'location', 'language', 'app_lock_enabled',
             'created_at', 'updated_at', 'is_following', 'is_close_friend', 'followers_count', 'following_count',
-            'friend_request_status'
+            'friend_request_status', 'highlights'
         ]
 
     def get_is_busy(self, obj):
@@ -274,13 +300,14 @@ class StorySerializer(serializers.ModelSerializer):
     is_liked = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
+    audio_details = AudioSerializer(source='audio', read_only=True)
 
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
     parent_user = SimpleUserSerializer(source='reposted_from.user', read_only=True)
 
     class Meta:
         model = Story
-        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_username', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user']
+        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_username', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -359,6 +386,48 @@ class StreakViewSerializer(serializers.ModelSerializer):
             return get_absolute_media_url(profile.photo, request)
         return None
 
+class StreakUploadSerializer(serializers.ModelSerializer):
+    user_display_name = serializers.CharField(source='user.profile.display_name', read_only=True)
+    user_avatar = serializers.SerializerMethodField()
+    media_url = serializers.SerializerMethodField()
+    likes_count = serializers.IntegerField(source='likes.count', read_only=True)
+    comments_count = serializers.IntegerField(source='comments.count', read_only=True)
+    view_count = serializers.IntegerField(source='views.count', read_only=True)
+    is_liked = serializers.SerializerMethodField()
+    is_owner = serializers.SerializerMethodField()
+    audio_details = AudioSerializer(source='audio', read_only=True)
+    mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
+
+    class Meta:
+        model = StreakUpload
+        fields = [
+            'id', 'user', 'user_display_name', 'user_avatar', 'media_url', 'media_type', 
+            'caption', 'visibility', 'created_at', 'likes_count', 'comments_count', 
+            'view_count', 'is_liked', 'is_owner', 'audio_details', 'mentioned_users'
+        ]
+
+    def get_user_avatar(self, obj):
+        request = self.context.get('request')
+        profile = getattr(obj.user, 'profile', None)
+        if profile: return get_absolute_media_url(profile.photo, request)
+        return None
+
+    def get_media_url(self, obj):
+        request = self.context.get('request')
+        return get_absolute_media_url(obj.media_url, request)
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.likes.filter(user=request.user).exists()
+        return False
+
+    def get_is_owner(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.user == request.user
+        return False
+
 class ReelSerializer(serializers.ModelSerializer):
     user_display_name = serializers.SerializerMethodField()
     user_username = serializers.CharField(source='user.username', read_only=True)
@@ -371,13 +440,14 @@ class ReelSerializer(serializers.ModelSerializer):
     is_owner = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
+    audio_details = AudioSerializer(source='audio', read_only=True)
 
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
     parent_user = SimpleUserSerializer(source='reposted_from.user', read_only=True)
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'mentioned_users', 'reposted_from', 'parent_user']
+        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -509,13 +579,14 @@ class PostSerializer(serializers.ModelSerializer):
     is_owner = serializers.SerializerMethodField()
     aspect_ratio = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
+    audio_details = AudioSerializer(source='audio', read_only=True)
 
     class Meta:
         model = Post
         fields = [
             'id', 'user', 'profile_id', 'display_name', 'username', 'photo', 'gender',
             'caption', 'image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner',
-            'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio'
+            'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio', 'audio_details'
         ]
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -576,6 +647,41 @@ class PostSerializer(serializers.ModelSerializer):
             if pi.image:
                 imgs.append(get_absolute_media_url(pi.image, request))
         return imgs
+
+class HighlightStorySerializer(serializers.ModelSerializer):
+    story = StorySerializer(read_only=True)
+    class Meta:
+        model = HighlightStory
+        fields = ['id', 'story', 'order']
+
+class HighlightSerializer(serializers.ModelSerializer):
+    stories = HighlightStorySerializer(many=True, read_only=True)
+    cover_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Highlight
+        fields = ['id', 'user', 'title', 'cover_image', 'stories', 'created_at']
+
+    def get_cover_image(self, obj):
+        request = self.context.get('request')
+        return get_absolute_media_url(obj.cover_image, request)
+
+class SavedItemSerializer(serializers.ModelSerializer):
+    post = PostSerializer(read_only=True)
+    reel = ReelSerializer(read_only=True)
+    audio = AudioSerializer(read_only=True)
+
+    class Meta:
+        model = SavedItem
+        fields = ['id', 'post', 'reel', 'audio', 'created_at']
+
+class CollectionSerializer(serializers.ModelSerializer):
+    items = SavedItemSerializer(many=True, read_only=True)
+    item_count = serializers.IntegerField(source='items.count', read_only=True)
+
+    class Meta:
+        model = Collection
+        fields = ['id', 'name', 'type', 'is_private', 'item_count', 'items', 'created_at']
 
 class CloseFriendSerializer(serializers.ModelSerializer):
     close_friend = SimpleUserSerializer()

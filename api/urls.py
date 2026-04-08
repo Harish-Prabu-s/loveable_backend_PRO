@@ -12,6 +12,8 @@ urlpatterns = [
     path('gamification/', include('api.modules.gamification.urls')),
     path('offers/', include('api.modules.offers.urls')),
     path('profiles/', include('api.modules.profiles.urls')),
+    path('highlights/', include('api.modules.highlights.urls')),
+    path('collections/', include('api.modules.collections.urls')),
     path('stories/', include('api.modules.stories.urls')),
     path('reels/', include('api.modules.reels.urls')),
     path('chat/', include('api.modules.chat.urls')),

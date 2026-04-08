@@ -24,12 +24,23 @@ class Audio(models.Model):
     duration_ms = models.IntegerField(default=0)
     is_trending = models.BooleanField(default=False)
     language = models.CharField(max_length=50, default='English') # Tamil, English, etc.
+    category = models.CharField(max_length=50, default='Trending') # Trending, Pop, Gana, etc.
     shazam_id = models.CharField(max_length=100, null=True, blank=True)
+    external_id = models.CharField(max_length=500, null=True, blank=True) # Spotify/YT ID
+    is_cached = models.BooleanField(default=False)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_audios')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.title} by {self.artist or 'Unknown'}"
+
+class FavoriteAudio(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='favorite_audios')
+    audio = models.ForeignKey(Audio, on_delete=models.CASCADE, related_name='favorited_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'audio')
 
 
 # ── Social Media Models ──────────────────────────────────────────────────────
@@ -405,6 +416,7 @@ class StreakUpload(models.Model):
     caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_streaks', blank=True)
+    audio = models.ForeignKey(Audio, on_delete=models.SET_NULL, null=True, blank=True, related_name='streak_uploads')
     hashtags = models.ManyToManyField(Hashtag, related_name='streak_uploads', blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -495,6 +507,7 @@ class Story(models.Model):
     caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_stories', blank=True)
+    audio = models.ForeignKey(Audio, on_delete=models.SET_NULL, null=True, blank=True, related_name='stories')
     hashtags = models.ManyToManyField(Hashtag, related_name='stories', blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     created_at = models.DateTimeField(default=timezone.now)
@@ -580,6 +593,57 @@ class StoryComment(models.Model):
     reply_to = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
     likes = models.ManyToManyField(User, related_name='liked_story_comments', blank=True)
     mentions = models.ManyToManyField(User, related_name='mentioned_in_story_comments', blank=True)
+
+
+# ── Highlights System ───────────────────────────────────────────────────────
+
+class Highlight(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='highlights')
+    title = models.CharField(max_length=50, default='Highlight')
+    cover_image = models.ImageField(upload_to='highlights/', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Highlight: {self.title} by {self.user.username}"
+
+class HighlightStory(models.Model):
+    highlight = models.ForeignKey(Highlight, on_delete=models.CASCADE, related_name='stories')
+    story = models.ForeignKey(Story, on_delete=models.CASCADE)
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+        unique_together = ('highlight', 'story')
+
+
+# ── Collections (Saved) System ──────────────────────────────────────────────
+
+class Collection(models.Model):
+    COLLECTION_TYPES = (
+        ('post', 'Posts'),
+        ('reel', 'Reels'),
+        ('audio', 'Audio'),
+        ('general', 'General'),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='collections')
+    name = models.CharField(max_length=120, default='Saved Items')
+    type = models.CharField(max_length=20, choices=COLLECTION_TYPES, default='general')
+    is_private = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.type}) for {self.user.username}"
+
+class SavedItem(models.Model):
+    collection = models.ForeignKey(Collection, on_delete=models.CASCADE, related_name='items')
+    # Using specific fields for simplicity vs GenericForeignKey in this scale
+    post = models.ForeignKey('Post', on_delete=models.CASCADE, null=True, blank=True)
+    reel = models.ForeignKey('Reel', on_delete=models.CASCADE, null=True, blank=True)
+    audio = models.ForeignKey('Audio', on_delete=models.CASCADE, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('collection', 'post', 'reel', 'audio')
 
 # ----------------------------------------------------------------------------
 # SOCIAL GAME ENGINE MODELS
