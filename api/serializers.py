@@ -362,7 +362,7 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
+        fields = ['id', 'user', 'video_url', 'thumbnail', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -385,6 +385,10 @@ class ReelSerializer(serializers.ModelSerializer):
     def get_video_url(self, obj):
         request = self.context.get('request')
         return get_absolute_media_url(obj.video_url, request)
+
+    def get_thumbnail(self, obj):
+        request = self.context.get('request')
+        return get_absolute_media_url(obj.thumbnail, request)
 
     def get_user_avatar(self, obj):
         request = self.context.get('request')

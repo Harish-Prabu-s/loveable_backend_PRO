@@ -527,6 +527,7 @@ class StoryView(models.Model):
 class Reel(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reels')
     video_url = models.FileField(upload_to='reels/')
+    thumbnail = models.ImageField(upload_to='reels/thumbnails/', null=True, blank=True)
     caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_reels', blank=True)

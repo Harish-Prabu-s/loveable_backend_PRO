@@ -17,7 +17,7 @@ class HighlightViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         highlight = serializer.save(user=self.request.user)
-        story_ids = self.request.data.get('story_ids', [])
+        story_ids = self.request.data.getlist('story_ids', [])
         for sid in story_ids:
             try:
                 story = Story.objects.get(id=sid)
@@ -28,7 +28,7 @@ class HighlightViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def add_stories(self, request, pk=None):
         highlight = self.get_object()
-        story_ids = request.data.get('story_ids', [])
+        story_ids = request.data.getlist('story_ids', [])
         
         for sid in story_ids:
             try:
