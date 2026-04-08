@@ -576,6 +576,7 @@ class HighlightSerializer(serializers.ModelSerializer):
     class Meta:
         model = Highlight
         fields = ['id', 'user', 'title', 'cover_image', 'stories', 'created_at']
+        read_only_fields = ['user']
 
     def get_cover_image(self, obj):
         request = self.context.get('request')

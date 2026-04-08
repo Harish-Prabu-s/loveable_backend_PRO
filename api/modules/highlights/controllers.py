@@ -16,7 +16,14 @@ class HighlightViewSet(viewsets.ModelViewSet):
         return Highlight.objects.filter(user=self.request.user).order_by('-created_at')
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        highlight = serializer.save(user=self.request.user)
+        story_ids = self.request.data.get('story_ids', [])
+        for sid in story_ids:
+            try:
+                story = Story.objects.get(id=sid)
+                HighlightStory.objects.get_or_create(highlight=highlight, story=story)
+            except Story.DoesNotExist:
+                pass
 
     @action(detail=True, methods=['post'])
     def add_stories(self, request, pk=None):
