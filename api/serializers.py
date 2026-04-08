@@ -354,6 +354,7 @@ class ReelSerializer(serializers.ModelSerializer):
     is_liked = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
+    is_saved = serializers.SerializerMethodField()
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
     audio_details = AudioSerializer(source='audio', read_only=True)
 
@@ -362,7 +363,13 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'thumbnail', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
+        fields = ['id', 'user', 'video_url', 'thumbnail', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
+
+    def get_is_saved(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return SavedItem.objects.filter(collection__user=request.user, reel=obj).exists()
+        return False
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -496,6 +503,7 @@ class PostSerializer(serializers.ModelSerializer):
     view_count = serializers.IntegerField(source='views.count', read_only=True)
     is_liked = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
+    is_saved = serializers.SerializerMethodField()
     aspect_ratio = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
     audio_details = AudioSerializer(source='audio', read_only=True)
@@ -504,7 +512,7 @@ class PostSerializer(serializers.ModelSerializer):
         model = Post
         fields = [
             'id', 'user', 'profile_id', 'display_name', 'username', 'photo', 'gender',
-            'caption', 'image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner',
+            'caption', 'image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_saved',
             'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio', 'audio_details'
         ]
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
@@ -544,6 +552,18 @@ class PostSerializer(serializers.ModelSerializer):
             
         if user:
             return obj.user == user
+        return False
+
+    def get_is_saved(self, obj):
+        request = self.context.get('request')
+        user = None
+        if request and request.user.is_authenticated:
+            user = request.user
+        else:
+            user = self.context.get('request_user')
+            
+        if user:
+            return SavedItem.objects.filter(collection__user=user, post=obj).exists()
         return False
 
     def get_aspect_ratio(self, obj):
