@@ -15,6 +15,19 @@ def list_stories_view(request):
     qs = get_active_stories(request.user)
     return Response(StorySerializer(qs, many=True, context={'request': request}).data)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_stories_view(request):
+    from ...models import Story
+    from django.utils import timezone
+    now = timezone.now()
+    qs = Story.objects.filter(
+        user=request.user,
+        expires_at__gt=now
+    ).order_by('-created_at')
+    return Response(StorySerializer(qs, many=True, context={'request': request}).data)
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_story_view(request):

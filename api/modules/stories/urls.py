@@ -1,12 +1,13 @@
 from django.urls import path
 from .controllers import (
-    list_stories_view, create_story_view, upload_story_media_view,
+    list_stories_view, my_stories_view, create_story_view, upload_story_media_view,
     view_story_view, list_story_views_view, like_story_view,
     comment_story_view, list_story_comments_view, delete_story_view, repost_story_view, detail_story_view
 )
 
 urlpatterns = [
     path('', list_stories_view),
+    path('me/', my_stories_view),
     path('create/', create_story_view),
     path('upload/', upload_story_media_view),
     path('<int:story_id>/', detail_story_view),

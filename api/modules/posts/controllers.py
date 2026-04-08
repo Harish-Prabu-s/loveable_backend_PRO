@@ -61,6 +61,15 @@ def feed_view(request):
     return Response(data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_posts_view(request):
+    from ...models import Post
+    posts = Post.objects.filter(user=request.user).select_related('user__profile').order_by('-created_at')
+    data = [_serialize_post(p, request.user, request) for p in posts]
+    return Response(data)
+
+
 from rest_framework.parsers import MultiPartParser, FormParser
 
 @api_view(['POST'])

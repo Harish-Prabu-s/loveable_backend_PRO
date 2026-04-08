@@ -29,6 +29,14 @@ def list_reels_view(request):
     qs = list_reels(user=request.user, limit=limit, page=page, random_flag=random_flag)
     return Response(ReelSerializer(qs, many=True, context={'request': request}).data)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_reels_view(request):
+    from ...models import Reel
+    qs = Reel.objects.filter(user=request.user, is_archived=False).order_by('-created_at')
+    return Response(ReelSerializer(qs, many=True, context={'request': request}).data)
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser])
