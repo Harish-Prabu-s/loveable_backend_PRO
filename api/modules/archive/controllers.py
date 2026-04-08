@@ -49,7 +49,7 @@ def list_archived_view(request):
     if not ctype:
         return Response({'error': 'type is required'}, status=400)
     
-    data = get_archived_content(request.user, ctype)
+    data = get_archived_content(request.user, ctype, request=request)
     if isinstance(data, dict) and 'error' in data:
         return Response(data, status=400)
     return Response(data)

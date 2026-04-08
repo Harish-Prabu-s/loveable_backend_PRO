@@ -74,20 +74,28 @@ def delete_content(user: User, content_type: str, content_id: int):
     except Exception as e:
         return {'error': str(e)}
 
-def get_archived_content(user, content_type: str):
+def get_archived_content(user, content_type: str, request=None):
     """
     Returns a list of archived items.
     """
+    from django.utils import timezone
+
     if content_type == 'post':
         from ...serializers import PostSerializer
         items = Post.objects.filter(user=user, is_archived=True).order_by('-created_at')
-        return PostSerializer(items, many=True, context={'request_user': user}).data
+        return PostSerializer(items, many=True, context={'request': request, 'request_user': user}).data
     elif content_type == 'reel':
         from ...serializers import ReelSerializer
         items = Reel.objects.filter(user=user, is_archived=True).order_by('-created_at')
-        return ReelSerializer(items, many=True, context={'request_user': user}).data
+        return ReelSerializer(items, many=True, context={'request': request, 'request_user': user}).data
     elif content_type == 'chat':
         from ...serializers import RoomSerializer
         items = Room.objects.filter(models.Q(caller=user) | models.Q(receiver=user), is_archived=True).order_by('-created_at')
-        return RoomSerializer(items, many=True, context={'request_user': user}).data
+        return RoomSerializer(items, many=True, context={'request': request, 'request_user': user}).data
+    elif content_type == 'story':
+        from ...models import Story
+        from ...serializers import StorySerializer
+        items = Story.objects.filter(user=user, expires_at__lte=timezone.now()).order_by('-created_at')
+        return StorySerializer(items, many=True, context={'request': request, 'request_user': user}).data
+    
     return {'error': 'Invalid content type'}
