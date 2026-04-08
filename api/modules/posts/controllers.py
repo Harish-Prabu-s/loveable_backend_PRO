@@ -70,6 +70,29 @@ def my_posts_view(request):
     return Response(data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_posts_view(request, user_id: int):
+    from ...models import Post
+    from django.db import models
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    
+    try:
+        target_user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=404)
+
+    posts = Post.objects.filter(user=target_user, is_archived=False).filter(
+        models.Q(visibility='all') | 
+        models.Q(user=request.user) | 
+        (models.Q(visibility='close_friends') & models.Q(user__close_friends__close_friend=request.user))
+    ).select_related('user__profile').order_by('-created_at')
+    
+    data = [_serialize_post(p, request.user, request) for p in posts]
+    return Response(data)
+
+
 from rest_framework.parsers import MultiPartParser, FormParser
 
 @api_view(['POST'])

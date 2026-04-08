@@ -37,6 +37,28 @@ def my_reels_view(request):
     qs = Reel.objects.filter(user=request.user, is_archived=False).order_by('-created_at')
     return Response(ReelSerializer(qs, many=True, context={'request': request}).data)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_reels_view(request, user_id: int):
+    from ...models import Reel, User
+    from django.db import models
+    try:
+        target_user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=404)
+
+    qs = Reel.objects.select_related('user__profile').filter(
+        user=target_user,
+        is_archived=False
+    ).filter(
+        models.Q(visibility='all') | 
+        models.Q(user=request.user) | 
+        (models.Q(visibility='close_friends') & models.Q(user__close_friends__close_friend=request.user))
+    ).order_by('-created_at')
+    
+    return Response(ReelSerializer(qs, many=True, context={'request': request}).data)
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser])

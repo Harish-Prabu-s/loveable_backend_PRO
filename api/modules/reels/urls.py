@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .controllers import (
-    list_reels_view, my_reels_view, create_reel_view, upload_reel_media_view,
+    list_reels_view, my_reels_view, user_reels_view, create_reel_view, upload_reel_media_view,
     like_reel_view, comment_reel_view, list_comments_view,
     share_reel_view, delete_reel_view, repost_reel_view, detail_reel_view,
     view_reel_view, toggle_reel_comment_like_view
@@ -10,6 +10,7 @@ from .controllers import (
 urlpatterns = [
     path('', list_reels_view),
     path('me/', my_reels_view),
+    path('user/<int:user_id>/', user_reels_view),
     path('create/', create_reel_view),
     path('upload/', upload_reel_media_view),
     path('<int:pk>/', detail_reel_view),
