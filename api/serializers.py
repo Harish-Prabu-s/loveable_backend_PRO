@@ -67,91 +67,6 @@ class SimpleUserSerializer(serializers.ModelSerializer):
             return get_absolute_media_url(profile.photo, request)
         return None
 
-class ProfileSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source='user.username', read_only=True)
-    is_following = serializers.SerializerMethodField()
-    is_close_friend = serializers.SerializerMethodField()
-    followers_count = serializers.SerializerMethodField()
-    following_count = serializers.SerializerMethodField()
-    friend_request_status = serializers.SerializerMethodField()
-    photo = serializers.SerializerMethodField()
-    is_busy = serializers.SerializerMethodField()
-    phone_number = serializers.SerializerMethodField()
-    email = serializers.EmailField(read_only=True)
-    highlights = HighlightSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Profile
-        fields = [
-            'id', 'user', 'username', 'phone_number', 'gender', 'is_verified', 'is_online', 'is_busy',
-            'date_joined', 'last_login', 'email', 'display_name', 'bio', 'photo',
-            'interests', 'age', 'location', 'language', 'app_lock_enabled',
-            'created_at', 'updated_at', 'is_following', 'is_close_friend', 'followers_count', 'following_count',
-            'friend_request_status', 'highlights'
-        ]
-
-    def get_is_busy(self, obj):
-        from .modules.chat.services import presence_status
-        return presence_status(obj.user.id) == 'busy'
-
-    def get_phone_number(self, obj):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated and obj.user == request.user:
-            return obj.phone_number
-        return None
-
-    def get_email(self, obj):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated and obj.user == request.user:
-            return obj.email
-        return None
-
-    def get_photo(self, obj):
-        request = self.context.get('request')
-        return get_absolute_media_url(obj.photo, request)
-
-    def get_is_following(self, obj):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            # Check if Follow model exists and check relation
-            return Follow.objects.filter(follower=request.user, following=obj.user).exists()
-        return False
-
-    def get_is_close_friend(self, obj):
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            return CloseFriend.objects.filter(user=request.user, close_friend=obj.user).exists()
-        return False
-
-    def get_followers_count(self, obj):
-        return Follow.objects.filter(following=obj.user).count()
-
-    def get_following_count(self, obj):
-        return Follow.objects.filter(follower=obj.user).count()
-
-    def get_friend_request_status(self, obj):
-        request = self.context.get('request')
-        if request and getattr(request, 'user', None) and request.user.is_authenticated:
-            try:
-                from .models import FriendRequest
-                # Case 1: I sent a request to them (return primitives only)
-                sent = (FriendRequest.objects
-                        .filter(from_user=request.user, to_user=obj.user)
-                        .values('id', 'status')
-                        .first())
-                if sent:
-                    return {'status': str(sent['status']), 'direction': 'sent', 'id': int(sent['id'])}
-                
-                # Case 2: They sent a request to me
-                received = (FriendRequest.objects
-                            .filter(from_user=obj.user, to_user=request.user)
-                            .values('id', 'status')
-                            .first())
-                if received:
-                    return {'status': str(received['status']), 'direction': 'received', 'id': int(received['id'])}
-            except Exception:
-                return None
-        return None
 
 class WalletSerializer(serializers.ModelSerializer):
     has_purchased = serializers.SerializerMethodField()
@@ -689,3 +604,89 @@ class CloseFriendSerializer(serializers.ModelSerializer):
     class Meta:
         model = CloseFriend
         fields = ['id', 'close_friend', 'created_at']
+
+class ProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    is_following = serializers.SerializerMethodField()
+    is_close_friend = serializers.SerializerMethodField()
+    followers_count = serializers.SerializerMethodField()
+    following_count = serializers.SerializerMethodField()
+    friend_request_status = serializers.SerializerMethodField()
+    photo = serializers.SerializerMethodField()
+    is_busy = serializers.SerializerMethodField()
+    phone_number = serializers.SerializerMethodField()
+    email = serializers.EmailField(read_only=True)
+    highlights = HighlightSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Profile
+        fields = [
+            'id', 'user', 'username', 'phone_number', 'gender', 'is_verified', 'is_online', 'is_busy',
+            'date_joined', 'last_login', 'email', 'display_name', 'bio', 'photo',
+            'interests', 'age', 'location', 'language', 'app_lock_enabled',
+            'created_at', 'updated_at', 'is_following', 'is_close_friend', 'followers_count', 'following_count',
+            'friend_request_status', 'highlights'
+        ]
+
+    def get_is_busy(self, obj):
+        from .modules.chat.services import presence_status
+        return presence_status(obj.user.id) == 'busy'
+
+    def get_phone_number(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated and obj.user == request.user:
+            return obj.phone_number
+        return None
+
+    def get_email(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated and obj.user == request.user:
+            return obj.email
+        return None
+
+    def get_photo(self, obj):
+        request = self.context.get('request')
+        return get_absolute_media_url(obj.photo, request)
+
+    def get_is_following(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            # Check if Follow model exists and check relation
+            return Follow.objects.filter(follower=request.user, following=obj.user).exists()
+        return False
+
+    def get_is_close_friend(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return CloseFriend.objects.filter(user=request.user, close_friend=obj.user).exists()
+        return False
+
+    def get_followers_count(self, obj):
+        return Follow.objects.filter(following=obj.user).count()
+
+    def get_following_count(self, obj):
+        return Follow.objects.filter(follower=obj.user).count()
+
+    def get_friend_request_status(self, obj):
+        request = self.context.get('request')
+        if request and getattr(request, 'user', None) and request.user.is_authenticated:
+            try:
+                from .models import FriendRequest
+                # Case 1: I sent a request to them (return primitives only)
+                sent = (FriendRequest.objects
+                        .filter(from_user=request.user, to_user=obj.user)
+                        .values('id', 'status')
+                        .first())
+                if sent:
+                    return {'status': str(sent['status']), 'direction': 'sent', 'id': int(sent['id'])}
+                
+                # Case 2: They sent a request to me
+                received = (FriendRequest.objects
+                            .filter(from_user=obj.user, to_user=request.user)
+                            .values('id', 'status')
+                            .first())
+                if received:
+                    return {'status': str(received['status']), 'direction': 'received', 'id': int(received['id'])}
+            except Exception:
+                return None
+        return None
