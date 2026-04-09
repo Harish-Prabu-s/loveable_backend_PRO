@@ -3,7 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.conf import settings
 from .services import get_feed, create_post, toggle_like, delete_post
-from ...models import PostLike
+from ...models import PostLike, Post
 from ..hashtags.controllers import sync_hashtags
 
 
@@ -126,7 +126,24 @@ def create_post_view(request):
         additional_images = request.FILES.getlist('images')
         
         post = create_post(request.user, caption, image, visibility, mentions=mentions, additional_images=additional_images)
-        sync_hashtags(caption, post)
+        
+        # Handle explicit hashtags if provided, otherwise parse from caption
+        hashtags = request.data.get('hashtags', [])
+        if isinstance(hashtags, str):
+            try:
+                import json
+                hashtags = json.loads(hashtags)
+            except:
+                hashtags = [h.strip() for h in hashtags.split(',') if h.strip()]
+        
+        if hashtags:
+            # Merge hashtags into caption or just sync them
+            from ..hashtags.controllers import sync_hashtags
+            full_text = caption + " " + " ".join([f"#{h.lstrip('#')}" for h in hashtags])
+            sync_hashtags(full_text, post)
+        else:
+            sync_hashtags(caption, post)
+            
         return Response(_serialize_post(post, request.user, request), status=201)
     except Exception as e:
         import traceback

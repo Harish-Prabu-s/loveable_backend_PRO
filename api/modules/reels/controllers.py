@@ -25,8 +25,9 @@ def list_reels_view(request):
         page, limit = 1, 10
         
     random_flag = request.GET.get('random', 'false').lower() == 'true'
+    hashtag = request.GET.get('hashtag')
     
-    qs = list_reels(user=request.user, limit=limit, page=page, random_flag=random_flag)
+    qs = list_reels(user=request.user, limit=limit, page=page, random_flag=random_flag, hashtag=hashtag)
     return Response(ReelSerializer(qs, many=True, context={'request': request}).data)
 
 
@@ -101,7 +102,24 @@ def create_reel_view(request):
             
     relative_video_path = strip_base_url(video_url) if video_url else ''
     reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions, audio_id=audio_id, audio_meta=audio_meta)
-    sync_hashtags(caption, reel)
+    
+    # Handle explicit hashtags if provided, otherwise parse from caption
+    hashtags = request.data.get('hashtags', [])
+    if isinstance(hashtags, str):
+        try:
+            import json
+            hashtags = json.loads(hashtags)
+        except:
+            hashtags = [h.strip() for h in hashtags.split(',') if h.strip()]
+    
+    if hashtags:
+        # Merge hashtags into caption or just sync them
+        from ..hashtags.controllers import sync_hashtags
+        full_text = caption + " " + " ".join([f"#{h.lstrip('#')}" for h in hashtags])
+        sync_hashtags(full_text, reel)
+    else:
+        sync_hashtags(caption, reel)
+
     return Response(ReelSerializer(reel, context={'request': request}).data, status=201)
 
 @api_view(['POST'])

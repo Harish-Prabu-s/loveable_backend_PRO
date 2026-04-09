@@ -7,10 +7,15 @@ from .models import (
     Game, LevelProgress, Offer, LeagueTier, CallSession,
     Badge, DailyReward, Room, Message, Story, Gift, GiftTransaction, StoryView, Follow, Reel, Streak, Post, PostLike,
     CloseFriend, PostView, ReelView, StreakView, StreakUpload, MessageReaction, Note,
-    Highlight, HighlightStory, Collection, SavedItem, FavoriteAudio
+    Highlight, HighlightStory, Collection, SavedItem, FavoriteAudio, Hashtag
 )
 from .utils import get_absolute_media_url
 from .models import Audio
+
+class HashtagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Hashtag
+        fields = ['id', 'name', 'usage_count']
 
 class AudioSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
@@ -361,9 +366,11 @@ class ReelSerializer(serializers.ModelSerializer):
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
     parent_user = SimpleUserSerializer(source='reposted_from.user', read_only=True)
 
+    hashtags = HashtagSerializer(many=True, read_only=True)
+
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'thumbnail', 'caption', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
+        fields = ['id', 'user', 'video_url', 'thumbnail', 'caption', 'hashtags', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
 
     def get_is_saved(self, obj):
         request = self.context.get('request')
@@ -508,11 +515,13 @@ class PostSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     audio_details = AudioSerializer(source='audio', read_only=True)
 
+    hashtags = HashtagSerializer(many=True, read_only=True)
+
     class Meta:
         model = Post
         fields = [
             'id', 'user', 'profile_id', 'display_name', 'username', 'photo', 'gender',
-            'caption', 'image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_saved',
+            'caption', 'hashtags', 'image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_saved',
             'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio', 'audio_details'
         ]
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
