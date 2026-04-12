@@ -231,7 +231,9 @@ def send_message(
         other_name = "Group"
         if not room.is_group:
             other_user = room.receiver if room.caller == sender else room.caller
-            other_name = getattr(other_user, 'profile', other_user).display_name if hasattr(other_user, 'profile') else other_user.username
+            if other_user:
+                profile = getattr(other_user, 'profile', None)
+                other_name = profile.display_name if profile and profile.display_name else (getattr(other_user, 'username', None) or 'User')
             
         with transaction.atomic():
             wallet.coin_balance = models.F('coin_balance') - cost
