@@ -118,7 +118,6 @@ def create_reel_view(request):
     
     if hashtags:
         # Merge hashtags into caption or just sync them
-        from ..hashtags.controllers import sync_hashtags
         full_text = caption + " " + " ".join([f"#{h.lstrip('#')}" for h in hashtags])
         sync_hashtags(full_text, reel)
     else:
