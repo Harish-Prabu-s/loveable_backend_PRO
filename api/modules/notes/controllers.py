@@ -60,12 +60,33 @@ def set_note(request):
         return Response({'error': 'text or audio_id required'}, status=400)
 
     expires_at = timezone.now() + timedelta(hours=expires_hours)
+    audio_meta = request.data.get('audio_meta')
     audio = None
+    
     if audio_id:
         try:
             audio = Audio.objects.get(pk=audio_id)
-        except Audio.DoesNotExist:
+        except (Audio.DoesNotExist, ValueError):
+            # It's an external string ID, we need to create it from audio_meta
             pass
+
+    if not audio and audio_meta and isinstance(audio_meta, dict):
+        try:
+            title = audio_meta.get('title', 'Original Audio')
+            artist = audio_meta.get('artist', 'Unknown')
+            cover_url = audio_meta.get('coverArt', '')
+            ext_url = audio_meta.get('url', '')
+            
+            audio, created = Audio.objects.get_or_create(
+                title=title, artist=artist,
+                defaults={'created_by': request.user, 'cover_image_url': cover_url}
+            )
+            
+            if created and ext_url:
+                audio.file_url = ext_url
+                audio.save()
+        except Exception as e:
+            print(f"Error creating audio for note from meta: {e}")
 
     note, _ = Note.objects.update_or_create(
         user=request.user,
