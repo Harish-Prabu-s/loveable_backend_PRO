@@ -22,6 +22,7 @@ def _note_data(note, request):
         'text': note.text,
         'audio_id': note.audio_id,
         'audio_title': note.audio.title if note.audio else None,
+        'audio_artist': note.audio.artist if note.audio else None,
         'audio_url': audio_url,
         'audio_start_sec': note.audio_start_sec,
         'expires_at': note.expires_at.isoformat() if note.expires_at else None,
