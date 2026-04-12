@@ -52,13 +52,37 @@ class AudioViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def spotify_search(self, request):
         query = request.query_params.get('q', '').strip()
-        if not query:
-            return Response([])
         
+        if not query:
+            query = "Trending"
+            
         from .spotify_service import SpotifyClient
         client = SpotifyClient()
-        results = client.search_tracks(query)
+        results = client.search_spotify(query)
+        
         return Response(results)
+
+    @action(detail=False, methods=['get'])
+    def spotify_artist_tracks(self, request):
+        artist_id = request.query_params.get('id')
+        if not artist_id:
+            return Response({'error': 'id required'}, status=400)
+            
+        from .spotify_service import SpotifyClient
+        client = SpotifyClient()
+        tracks = client.get_artist_top_tracks(artist_id)
+        return Response(tracks)
+
+    @action(detail=False, methods=['get'])
+    def spotify_album_tracks(self, request):
+        album_id = request.query_params.get('id')
+        if not album_id:
+            return Response({'error': 'id required'}, status=400)
+            
+        from .spotify_service import SpotifyClient
+        client = SpotifyClient()
+        tracks = client.get_album_tracks(album_id)
+        return Response(tracks)
 
     @action(detail=False, methods=['post'])
     def import_spotify_track(self, request):

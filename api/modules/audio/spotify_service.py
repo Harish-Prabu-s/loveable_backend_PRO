@@ -37,32 +37,111 @@ class SpotifyClient:
         
         return None
 
-    def search_tracks(self, query, limit=20):
+    def search_spotify(self, query, types=['track', 'artist', 'album'], limit=20):
         token = self.get_access_token()
         if not token:
-            return []
+            return {"tracks": [], "artists": [], "albums": []}
 
         response = requests.get(
             f"{self.base_url}/search",
-            params={'q': query, 'type': 'track', 'limit': limit},
+            params={
+                'q': query, 
+                'type': ','.join(types), 
+                'limit': limit,
+                'include_external': 'audio'
+            },
             headers={'Authorization': f'Bearer {token}'}
         )
 
+        if response.status_code != 200:
+            return {"tracks": [], "artists": [], "albums": []}
+
+        data = response.json()
+        results = {
+            "tracks": [],
+            "artists": [],
+            "albums": []
+        }
+
+        # Parse Tracks
+        for item in data.get('tracks', {}).get('items', []):
+            results["tracks"].append(self._map_track(item))
+
+        # Parse Artists
+        for item in data.get('artists', {}).get('items', []):
+            results["artists"].append({
+                'id': item['id'],
+                'name': item['name'],
+                'genres': item.get('genres', []),
+                'image_url': item['images'][0]['url'] if item.get('images') else None,
+                'followers': item.get('followers', {}).get('total', 0),
+                'type': 'artist'
+            })
+
+        # Parse Albums
+        for item in data.get('albums', {}).get('items', []):
+            results["albums"].append({
+                'id': item['id'],
+                'name': item['name'],
+                'artist': item['artists'][0]['name'] if item.get('artists') else 'Unknown',
+                'image_url': item['images'][0]['url'] if item.get('images') else None,
+                'release_date': item.get('release_date'),
+                'total_tracks': item.get('total_tracks', 0),
+                'type': 'album'
+            })
+
+        return results
+
+    def get_artist_top_tracks(self, artist_id, market='US'):
+        token = self.get_access_token()
+        if not token: return []
+        
+        response = requests.get(
+            f"{self.base_url}/artists/{artist_id}/top-tracks",
+            params={'market': market},
+            headers={'Authorization': f'Bearer {token}'}
+        )
+        
+        if response.status_code == 200:
+            return [self._map_track(item) for item in response.json().get('tracks', [])]
+        return []
+
+    def get_album_tracks(self, album_id):
+        token = self.get_access_token()
+        if not token: return []
+        
+        # Get album metadata to get the cover image for the tracks
+        album_res = requests.get(
+            f"{self.base_url}/albums/{album_id}",
+            headers={'Authorization': f'Bearer {token}'}
+        )
+        album_data = album_res.json() if album_res.status_code == 200 else {}
+        cover_image = album_data.get('images', [{}])[0].get('url', '')
+
+        response = requests.get(
+            f"{self.base_url}/albums/{album_id}/tracks",
+            headers={'Authorization': f'Bearer {token}'}
+        )
+        
         if response.status_code == 200:
             tracks = []
-            data = response.json()
-            for item in data.get('tracks', {}).get('items', []):
-                # We need title, artist, coverURL, previewURL, and duration
-                tracks.append({
-                    'id': item['id'],
-                    'title': item['name'],
-                    'artist': item['artists'][0]['name'] if item['artists'] else 'Unknown',
-                    'cover_image_url': item['album']['images'][0]['url'] if item['album']['images'] else '',
-                    'file_url': item.get('preview_url'), # 30s preview
-                    'duration_ms': item['duration_ms'],
-                    'external_id': item['id'],
-                    'source': 'spotify'
-                })
+            for item in response.json().get('items', []):
+                # Standardize with cover image from album
+                track = self._map_track(item)
+                if not track['cover_image_url']:
+                    track['cover_image_url'] = cover_image
+                tracks.append(track)
             return tracks
-        
         return []
+
+    def _map_track(self, item):
+        return {
+            'id': item['id'],
+            'title': item['name'],
+            'artist': item['artists'][0]['name'] if item.get('artists') else 'Unknown',
+            'cover_image_url': item['album']['images'][0]['url'] if item.get('album') and item['album'].get('images') else '',
+            'file_url': item.get('preview_url'),
+            'duration_ms': item['duration_ms'],
+            'external_id': item['id'],
+            'source': 'spotify'
+        }
