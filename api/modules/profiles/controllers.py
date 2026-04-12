@@ -18,6 +18,60 @@ def profile_me(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def profile_insights_view(request):
+    # Dummy implementation for profile insights
+    from ...models import Follow
+    
+    data = {
+        "profile_views_total": 450,
+        "profile_views_week": [
+            { "day": "Mon", "count": 30 }, { "day": "Tue", "count": 50 },
+            { "day": "Wed", "count": 80 }, { "day": "Thu", "count": 40 },
+            { "day": "Fri", "count": 90 }, { "day": "Sat", "count": 110 },
+            { "day": "Sun", "count": 50 },
+        ],
+        "engagement_rate": 6.8,
+        "total_likes": 250,
+        "total_comments": 45,
+        "total_shares": 10,
+        "followers_growth": 15,
+        "followers_growth_pct": 4.2
+    }
+    return Response(data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def suggestion_profiles_view(request):
+    from ...models import Follow, FriendRequest
+    user = request.user
+    
+    # Exclude self
+    qs = Profile.objects.exclude(user=user).select_related('user')
+    
+    # Exclude already following
+    following_ids = Follow.objects.filter(follower=user).values_list('following_id', flat=True)
+    
+    # Exclude friends
+    friend_ids = FriendRequest.objects.filter(
+        (Q(from_user=user) | Q(to_user=user)),
+        status='accepted'
+    ).values_list('from_user_id', 'to_user_id')
+    
+    flat_friend_ids = set()
+    for f in friend_ids:
+        flat_friend_ids.add(f[0])
+        flat_friend_ids.add(f[1])
+        
+    exclude_ids = set(following_ids) | flat_friend_ids
+    if exclude_ids:
+        qs = qs.exclude(user_id__in=exclude_ids)
+        
+    # Return up to 10 random suggestions
+    suggestions = qs.order_by('?')[:10]
+    return Response(ProfileSerializer(suggestions, many=True, context={'request': request}).data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def list_profiles_view(request):
     search = request.GET.get('search')
     is_online = request.GET.get('is_online')
