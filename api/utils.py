@@ -53,6 +53,14 @@ def get_absolute_media_url(path, request=None):
             match = re.search(r'https?://[^/]+(/.*)', path_str)
             if match:
                 relative_url = match.group(1)
+                
+                # 🛑 CRITICAL FIX: If the "relative" part is actually another absolute URL (doubled-up URL)
+                # This happens if a past bug prefixed an external URL with our domain.
+                # Example: https://loveable.sbs/https://aac.saavncdn.com/...
+                inner_match = re.search(r'(https?://.*)', relative_url)
+                if inner_match:
+                    return inner_match.group(1)
+
                 media_url = settings.MEDIA_URL.rstrip('/')
                 
                 # Check if it's a known local/internal domain

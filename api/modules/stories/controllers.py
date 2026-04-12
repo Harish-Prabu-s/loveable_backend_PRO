@@ -45,6 +45,7 @@ def create_story_view(request):
     audio_id = request.data.get('audio_id')
     audio_meta = request.data.get('audio_meta')
     audio_start_sec = request.data.get('audio_start_sec', 0)
+    mentions = request.data.get('mentions', [])
     
     if isinstance(audio_meta, str):
         try:

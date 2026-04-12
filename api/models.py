@@ -19,7 +19,7 @@ class Hashtag(models.Model):
 class Audio(models.Model):
     title = models.CharField(max_length=255, default='Original Audio')
     artist = models.CharField(max_length=255, null=True, blank=True)
-    file_url = models.FileField(upload_to='audios/')
+    file_url = models.FileField(upload_to='audios/', max_length=1000)
     cover_image_url = models.URLField(max_length=500, null=True, blank=True)
     duration_ms = models.IntegerField(default=0)
     is_trending = models.BooleanField(default=False)
