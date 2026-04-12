@@ -74,15 +74,18 @@ class AudioViewSet(viewsets.ModelViewSet):
         return Response(tracks)
 
     @action(detail=False, methods=['get'])
-    def spotify_album_tracks(self, request):
-        album_id = request.query_params.get('id')
-        if not album_id:
-            return Response({'error': 'id required'}, status=400)
+    def saavn_search(self, request):
+        query = request.query_params.get('q', '').strip()
+        
+        from .saavn_service import SaavnClient
+        client = SaavnClient()
+        
+        if not query:
+            results = client.get_top_trending()
+        else:
+            results = client.search(query)
             
-        from .spotify_service import SpotifyClient
-        client = SpotifyClient()
-        tracks = client.get_album_tracks(album_id)
-        return Response(tracks)
+        return Response(results)
 
     @action(detail=False, methods=['post'])
     def import_spotify_track(self, request):

@@ -48,7 +48,6 @@ class SpotifyClient:
             'q': query, 
             'type': ','.join(types), 
             'limit': limit,
-            'include_external': 'audio'
         }
         headers = {'Authorization': f'Bearer {token}'}
         
