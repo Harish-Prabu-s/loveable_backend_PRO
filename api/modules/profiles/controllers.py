@@ -19,25 +19,110 @@ def profile_me(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def profile_insights_view(request):
-    # Dummy implementation for profile insights
-    from ...models import Follow
-    
-    data = {
-        "profile_views_total": 450,
-        "profile_views_week": [
-            { "day": "Mon", "count": 30 }, { "day": "Tue", "count": 50 },
-            { "day": "Wed", "count": 80 }, { "day": "Thu", "count": 40 },
-            { "day": "Fri", "count": 90 }, { "day": "Sat", "count": 110 },
-            { "day": "Sun", "count": 50 },
-        ],
-        "engagement_rate": 6.8,
-        "total_likes": 250,
-        "total_comments": 45,
-        "total_shares": 10,
-        "followers_growth": 15,
-        "followers_growth_pct": 4.2
-    }
-    return Response(data)
+    """
+    Real analytics for the authenticated user's profile:
+    - Total & per-day post/reel views (last 7 days)
+    - Total likes/comments across posts, reels and stories
+    - Follower growth vs prior week
+    - Engagement rate = (total_likes + total_comments) / total_content * 100
+    """
+    from django.db.models import Count
+    from django.utils import timezone
+    from datetime import timedelta
+    from ...models import (
+        Post, Reel, Story,
+        PostLike, PostComment, PostView,
+        ReelLike, ReelComment, ReelView,
+        StoryLike, StoryView,
+        Follow,
+    )
+
+    user = request.user
+    now = timezone.now()
+    week_ago = now - timedelta(days=7)
+    two_weeks_ago = now - timedelta(days=14)
+
+    # ── Content sets owned by this user ──────────────────────────────────────
+    user_posts = Post.objects.filter(user=user, is_archived=False)
+    user_reels = Reel.objects.filter(user=user, is_archived=False)
+    user_stories = Story.objects.filter(user=user)
+
+    post_ids = list(user_posts.values_list('id', flat=True))
+    reel_ids = list(user_reels.values_list('id', flat=True))
+    story_ids = list(user_stories.values_list('id', flat=True))
+
+    # ── Overall totals ────────────────────────────────────────────────────────
+    total_likes = (
+        PostLike.objects.filter(post_id__in=post_ids).count()
+        + ReelLike.objects.filter(reel_id__in=reel_ids).count()
+        + StoryLike.objects.filter(story_id__in=story_ids).count()
+    )
+    total_comments = (
+        PostComment.objects.filter(post_id__in=post_ids).count()
+        + ReelComment.objects.filter(reel_id__in=reel_ids).count()
+    )
+    total_shares = 0  # Placeholder; add a Share model later if needed
+
+    total_views = (
+        PostView.objects.filter(post_id__in=post_ids).count()
+        + ReelView.objects.filter(reel_id__in=reel_ids).count()
+        + StoryView.objects.filter(story_id__in=story_ids).count()
+    )
+
+    total_content = len(post_ids) + len(reel_ids) + len(story_ids)
+    if total_content > 0:
+        engagement_rate = round((total_likes + total_comments) / max(total_views, 1) * 100, 1)
+    else:
+        engagement_rate = 0.0
+
+    # ── Per-day views for the last 7 days ────────────────────────────────────
+    DAY_ABBR = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    daily_views = {d: 0 for d in range(7)}  # key = 0 (Mon) … 6 (Sun)
+
+    # Collect viewed_at grouped by weekday for each view type
+    for qs, date_field, id_field, id_list in [
+        (PostView.objects, 'viewed_at', 'post_id', post_ids),
+        (ReelView.objects, 'viewed_at', 'reel_id', reel_ids),
+        (StoryView.objects, 'viewed_at', 'story_id', story_ids),
+    ]:
+        rows = qs.filter(**{
+            f"{id_field}__in": id_list,
+            f"{date_field}__gte": week_ago,
+        }).values_list(date_field, flat=True)
+        for dt in rows:
+            daily_views[dt.weekday()] += 1
+
+    profile_views_week = [
+        {"day": DAY_ABBR[i], "count": daily_views[i]}
+        for i in range(7)
+    ]
+
+    # ── Follower growth (this week vs last week) ──────────────────────────────
+    followers_now = Follow.objects.filter(following=user, created_at__gte=week_ago).count()
+    followers_prev = Follow.objects.filter(
+        following=user,
+        created_at__gte=two_weeks_ago,
+        created_at__lt=week_ago,
+    ).count()
+    followers_growth = followers_now - followers_prev
+    followers_total = Follow.objects.filter(following=user).count()
+    followers_growth_pct = (
+        round(followers_growth / followers_prev * 100, 1)
+        if followers_prev > 0
+        else (100.0 if followers_growth > 0 else 0.0)
+    )
+
+    return Response({
+        "profile_views_total": total_views,
+        "profile_views_week": profile_views_week,
+        "engagement_rate": engagement_rate,
+        "total_likes": total_likes,
+        "total_comments": total_comments,
+        "total_shares": total_shares,
+        "followers_total": followers_total,
+        "followers_growth": followers_growth,
+        "followers_growth_pct": followers_growth_pct,
+    })
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
