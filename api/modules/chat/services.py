@@ -189,23 +189,37 @@ def send_message(
 
     # 1. Deduct for text (if applicable)
     if msg_type == 'text':
-        cost = get_chat_cost()
-        if cost > 0:
-            wallet, _ = Wallet.objects.get_or_create(user=sender)
-            if wallet.coin_balance < cost:
-                raise Exception("Insufficient coins")
-            other_user = room.receiver if room.caller == sender else room.caller
-            target_name = getattr(other_user, 'profile', other_user).display_name if hasattr(other_user, 'profile') else other_user.username
-            with transaction.atomic():
-                wallet.coin_balance = models.F('coin_balance') - cost
-                wallet.total_spent = models.F('total_spent') + cost
-                wallet.save(update_fields=['coin_balance', 'total_spent'])
-                CoinTransaction.objects.create(
-                    wallet=wallet, amount=cost,
-                    type='debit', transaction_type='chat_spent',
-                    description=f"Sent text message to {target_name}",
-                    target_user=other_user
-                )
+        try:
+            cost = get_chat_cost()
+            if cost > 0:
+                wallet, _ = Wallet.objects.get_or_create(user=sender)
+                if wallet.coin_balance < cost:
+                    raise Exception("Insufficient coins")
+                # For group chats room.receiver is None — derive target safely
+                if room.is_group:
+                    target_name = room.name or "Group"
+                    other_user = None
+                else:
+                    other_user = room.receiver if room.caller == sender else room.caller
+                    profile = getattr(other_user, 'profile', None)
+                    target_name = profile.display_name if profile and profile.display_name else (getattr(other_user, 'username', None) or 'User')
+                with transaction.atomic():
+                    wallet.coin_balance = models.F('coin_balance') - cost
+                    wallet.total_spent = models.F('total_spent') + cost
+                    wallet.save(update_fields=['coin_balance', 'total_spent'])
+                    txn_kwargs = dict(
+                        wallet=wallet, amount=cost,
+                        type='debit', transaction_type='chat_spent',
+                        description=f"Sent text message to {target_name}",
+                    )
+                    if other_user:
+                        txn_kwargs['target_user'] = other_user
+                    CoinTransaction.objects.create(**txn_kwargs)
+        except Exception as e:
+            if str(e) == "Insufficient coins":
+                raise   # re-raise so the controller can return a 402
+            import logging
+            logging.getLogger(__name__).warning(f"[send_message] coin deduction skipped: {e}")
 
     # 1.b Deduct for profile share
     elif msg_type == 'profile_share':
