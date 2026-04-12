@@ -100,8 +100,12 @@ def create_reel_view(request):
     # Audio metadata
     audio_meta = request.data.get('audio_meta')
             
+    cover_image = request.FILES.get('cover_image')
+    if not cover_image:
+        return Response({'error': 'Cover image is mandatory'}, status=400)
+            
     relative_video_path = strip_base_url(video_url) if video_url else ''
-    reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions, audio_id=audio_id, audio_meta=audio_meta)
+    reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions, audio_id=audio_id, audio_meta=audio_meta, cover_image=cover_image)
     
     # Handle explicit hashtags if provided, otherwise parse from caption
     hashtags = request.data.get('hashtags', [])

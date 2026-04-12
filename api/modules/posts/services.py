@@ -43,11 +43,13 @@ import base64
 import re
 import uuid
 
-def create_post(user, caption: str, image=None, visibility='all', mentions=None, additional_images=None):
+def create_post(user, caption: str, image=None, cover_image=None, visibility='all', mentions=None, additional_images=None):
     """Create and return a new post, optionally saving an uploaded image file and processing mentions."""
     from ...models import PostImage
     
     post = Post(user=user, caption=caption, visibility=visibility)
+    
+    # Save primary image
     if image:
         if isinstance(image, str):
             # Try parsing it as a base64 data URI
@@ -67,6 +69,12 @@ def create_post(user, caption: str, image=None, visibility='all', mentions=None,
             filename = f"posts/{user.id}_{uuid.uuid4().hex[:8]}_{image.name}"
             path = default_storage.save(filename, ContentFile(image.read()))
             post.image = path
+
+    # Save cover image
+    if cover_image:
+        filename = f"posts/covers/{user.id}_{uuid.uuid4().hex[:8]}_{getattr(cover_image, 'name', 'cover.jpg')}"
+        path = default_storage.save(filename, ContentFile(cover_image.read() if hasattr(cover_image, 'read') else cover_image))
+        post.cover_image = path
     
     post.save()
     

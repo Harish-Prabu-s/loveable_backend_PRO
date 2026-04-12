@@ -426,7 +426,7 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'thumbnail', 'caption', 'hashtags', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
+        fields = ['id', 'user', 'video_url', 'thumbnail', 'cover_image', 'caption', 'hashtags', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
 
     def get_is_saved(self, obj):
         request = self.context.get('request')
@@ -459,6 +459,10 @@ class ReelSerializer(serializers.ModelSerializer):
     def get_thumbnail(self, obj):
         request = self.context.get('request')
         return get_absolute_media_url(obj.thumbnail, request)
+
+    def get_cover_image(self, obj):
+        request = self.context.get('request')
+        return get_absolute_media_url(obj.cover_image, request)
 
     def get_user_avatar(self, obj):
         request = self.context.get('request')
@@ -577,7 +581,7 @@ class PostSerializer(serializers.ModelSerializer):
         model = Post
         fields = [
             'id', 'user', 'profile_id', 'display_name', 'username', 'photo', 'gender',
-            'caption', 'hashtags', 'image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_saved',
+            'caption', 'hashtags', 'image', 'cover_image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_saved',
             'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio', 'audio_details'
         ]
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
@@ -594,6 +598,10 @@ class PostSerializer(serializers.ModelSerializer):
     def get_image(self, obj):
         request = self.context.get('request')
         return get_absolute_media_url(obj.image, request)
+
+    def get_cover_image(self, obj):
+        request = self.context.get('request')
+        return get_absolute_media_url(obj.cover_image, request)
 
     def get_is_liked(self, obj):
         request = self.context.get('request')

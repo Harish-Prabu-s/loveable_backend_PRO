@@ -13,6 +13,7 @@ def _serialize_post(post, request_user, request=None):
     """Serialize a Post instance efficiently using annotated data."""
     p = getattr(post.user, 'profile', None)
     image_url = get_absolute_media_url(post.image, request)
+    cover_image_url = get_absolute_media_url(post.cover_image, request)
     photo_url = get_absolute_media_url(p.photo, request) if p else None
 
     # Use annotated values or fallbacks if not available (e.g. for single post)
@@ -30,6 +31,7 @@ def _serialize_post(post, request_user, request=None):
         'gender': p.gender if p else '',
         'caption': post.caption,
         'image': image_url,
+        'cover_image': cover_image_url,
         'likes_count': likes_count,
         'comments_count': comments_count,
         'is_liked': is_liked,
@@ -114,6 +116,10 @@ def create_post_view(request):
         if not caption and not image:
             return Response({'error': 'caption or image required', 'debug_files': list(request.FILES.keys()), 'debug_data': list(request.data.keys())}, status=400)
 
+        cover_image = request.FILES.get('cover_image')
+        if not cover_image:
+             return Response({'error': 'Cover image is mandatory'}, status=400)
+
         visibility = request.data.get('visibility', 'all')
         mentions = request.data.get('mentions', [])
         if isinstance(mentions, str):
@@ -126,7 +132,7 @@ def create_post_view(request):
         # Handle multiple images
         additional_images = request.FILES.getlist('images')
         
-        post = create_post(request.user, caption, image, visibility, mentions=mentions, additional_images=additional_images)
+        post = create_post(request.user, caption, image, cover_image=cover_image, visibility=visibility, mentions=mentions, additional_images=additional_images)
         
         # Handle explicit hashtags if provided, otherwise parse from caption
         hashtags = request.data.get('hashtags', [])

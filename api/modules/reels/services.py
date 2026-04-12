@@ -37,8 +37,18 @@ def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False, 
         
     return qs
 
-def create_reel(user, video_url: str, caption: str = '', visibility='all', mentions=None, audio_id=None, audio_meta=None):
+def create_reel(user, video_url: str, caption: str = '', visibility='all', mentions=None, audio_id=None, audio_meta=None, cover_image=None):
+    from django.core.files.storage import default_storage
+    from django.core.files.base import ContentFile
+    import uuid
+
     reel = Reel.objects.create(user=user, video_url=video_url, caption=caption, visibility=visibility)
+    
+    if cover_image:
+        filename = f"reels/covers/{user.id}_{uuid.uuid4().hex[:8]}_{getattr(cover_image, 'name', 'cover.jpg')}"
+        path = default_storage.save(filename, ContentFile(cover_image.read() if hasattr(cover_image, 'read') else cover_image))
+        reel.cover_image = path
+        reel.save()
     if audio_id:
         try:
             from ...models import Audio
