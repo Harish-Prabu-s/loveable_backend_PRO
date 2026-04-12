@@ -197,51 +197,67 @@ class MessageSerializer(serializers.ModelSerializer):
                   'duration_seconds', 'created_at', 'is_seen', 'seen_at',
                   'expires_at', 'reply_to', 'reactions', 'seen_by_users']
 
+    def _photo_url(self, photo_field, request):
+        """Safely build an absolute URL for a photo field, handling missing request."""
+        if not photo_field:
+            return None
+        try:
+            raw = photo_field.url if hasattr(photo_field, 'url') else str(photo_field)
+            if request:
+                return request.build_absolute_uri(raw)
+            # No request (e.g. WebSocket broadcast) — return relative path as-is
+            return raw
+        except Exception:
+            return None
+
     def _sender_data(self, user):
         """Return minimal sender info needed by the frontend."""
         if not user:
             return None
-        profile = getattr(user, 'profile', None)
-        request = self.context.get('request')
-        photo_url = None
-        if profile and profile.photo:
-            photo_url = request.build_absolute_uri(profile.photo.url) if request else profile.photo.url
-        return {
-            'id': user.id,
-            'username': user.username,
-            'display_name': profile.display_name if profile else user.username,
-            'photo': photo_url,
-        }
+        try:
+            profile = getattr(user, 'profile', None)
+            request = self.context.get('request')
+            return {
+                'id': user.id,
+                'username': user.username,
+                'display_name': profile.display_name if profile and profile.display_name else user.username,
+                'photo': self._photo_url(profile.photo if profile else None, request),
+            }
+        except Exception:
+            return {'id': getattr(user, 'id', None), 'username': getattr(user, 'username', ''), 'display_name': '', 'photo': None}
 
     def get_sender(self, obj):
         return self._sender_data(obj.sender)
 
     def get_seen_by_users(self, obj):
-        seen_list = obj.seen_by_users.select_related('user__profile').all()
-        result = []
-        request = self.context.get('request')
-        for sv in seen_list:
-            profile = getattr(sv.user, 'profile', None)
-            photo_url = None
-            if profile and profile.photo:
-                photo_url = request.build_absolute_uri(profile.photo.url) if request else profile.photo.url
-            result.append({
-                'id': sv.user.id,
-                'display_name': profile.display_name if profile else sv.user.username,
-                'photo': photo_url,
-                'seen_at': sv.seen_at,
-            })
-        return result
+        try:
+            seen_list = obj.seen_by_users.select_related('user__profile').all()
+            request = self.context.get('request')
+            result = []
+            for sv in seen_list:
+                profile = getattr(sv.user, 'profile', None)
+                result.append({
+                    'id': sv.user.id,
+                    'display_name': profile.display_name if profile and profile.display_name else sv.user.username,
+                    'photo': self._photo_url(profile.photo if profile else None, request),
+                    'seen_at': sv.seen_at,
+                })
+            return result
+        except Exception:
+            return []
 
     def get_reply_to(self, obj):
         if obj.reply_to:
-            return {
-                'id': obj.reply_to.id,
-                'content': obj.reply_to.content,
-                'type': obj.reply_to.type,
-                'sender': self._sender_data(obj.reply_to.sender),
-                'created_at': obj.reply_to.created_at,
-            }
+            try:
+                return {
+                    'id': obj.reply_to.id,
+                    'content': obj.reply_to.content,
+                    'type': obj.reply_to.type,
+                    'sender': self._sender_data(obj.reply_to.sender),
+                    'created_at': obj.reply_to.created_at,
+                }
+            except Exception:
+                return None
         return None
 
 class StreakSerializer(serializers.ModelSerializer):
