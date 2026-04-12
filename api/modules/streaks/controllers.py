@@ -14,14 +14,21 @@ def upload_streak(request):
     visibility = request.data.get('visibility', 'all')
     caption = request.data.get('caption', '').strip()
     mentions = request.data.get('mentions', [])
-    if isinstance(mentions, str):
+    audio_id = request.data.get('audio_id')
+    audio_meta = request.data.get('audio_meta')
+    audio_start_sec = request.data.get('audio_start_sec', 0)
+    
+    if isinstance(audio_meta, str):
         try:
             import json
-            mentions = json.loads(mentions)
+            audio_meta = json.loads(audio_meta)
         except:
-            mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
-            
-    upload, msg = upload_streak_service(request.user, media, media_type, visibility, caption, mentions=mentions)
+            pass
+
+    upload, msg = upload_streak_service(
+        request.user, media, media_type, visibility, caption, 
+        mentions=mentions, audio_id=audio_id, audio_meta=audio_meta, audio_start_sec=audio_start_sec
+    )
     if not upload:
         return Response({'error': msg}, status=400)
     

@@ -48,17 +48,18 @@ def get_absolute_media_url(path, request=None):
     # 🔗 Handle already absolute URLs
     if path_str.startswith('http://') or path_str.startswith('https://'):
         # If we have a request, we REROUTE the absolute URL to the current requested host
-        # ONLY if it appears to be a local media file (starts with MEDIA_URL or uses local IPs)
+        # ONLY if it appears to be a local media file (starts with MEDIA_URL)
         if request:
             match = re.search(r'https?://[^/]+(/.*)', path_str)
             if match:
                 relative_url = match.group(1)
                 media_url = settings.MEDIA_URL.rstrip('/')
-
-                is_local_host = any(
-                    h in path_str for h in ['localhost', '127.0.0.1', '10.0.2.2', '192.168.', 'loveable.sbs'])
-
-                if relative_url.startswith(media_url + '/') or is_local_host:
+                
+                # Check if it's a known local/internal domain
+                is_internal_domain = any(h in path_str for h in ['localhost', '127.0.0.1', '10.0.2.2', '192.168.', 'loveable.sbs'])
+                
+                # We only reroute if it's an internal domain AND it's in the media folder
+                if is_internal_domain and relative_url.startswith(media_url + '/'):
                     absolute_url = request.build_absolute_uri(relative_url)
                     if (is_production or request.is_secure()) and absolute_url.startswith('http://'):
                         return absolute_url.replace('http://', 'https://', 1)

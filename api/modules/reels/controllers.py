@@ -95,17 +95,21 @@ def create_reel_view(request):
             mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
             
     audio_id = request.data.get('audio_id')
-    audio_id = int(audio_id) if audio_id and str(audio_id).isdigit() else None
-    
-    # Audio metadata
+    audio_start_sec = request.data.get('audio_start_sec', 0)
     audio_meta = request.data.get('audio_meta')
+    if isinstance(audio_meta, str):
+        try:
+            import json
+            audio_meta = json.loads(audio_meta)
+        except:
+            pass
             
     cover_image = request.FILES.get('cover_image')
     if not cover_image:
         return Response({'error': 'Cover image is mandatory'}, status=400)
             
     relative_video_path = strip_base_url(video_url) if video_url else ''
-    reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions, audio_id=audio_id, audio_meta=audio_meta, cover_image=cover_image)
+    reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions, audio_id=audio_id, audio_meta=audio_meta, audio_start_sec=audio_start_sec, cover_image=cover_image)
     
     # Handle explicit hashtags if provided, otherwise parse from caption
     hashtags = request.data.get('hashtags', [])

@@ -130,7 +130,22 @@ def create_post_view(request):
         # Handle multiple images
         additional_images = request.FILES.getlist('images')
         
-        post = create_post(request.user, caption, image, cover_image=cover_image, visibility=visibility, mentions=mentions, additional_images=additional_images)
+        audio_id = request.data.get('audio_id')
+        audio_start_sec = request.data.get('audio_start_sec', 0)
+        audio_meta = request.data.get('audio_meta')
+        if isinstance(audio_meta, str):
+            try:
+                import json
+                audio_meta = json.loads(audio_meta)
+            except:
+                pass
+
+        post = create_post(
+            request.user, caption, image, 
+            cover_image=cover_image, visibility=visibility, 
+            mentions=mentions, additional_images=additional_images,
+            audio_id=audio_id, audio_meta=audio_meta, audio_start_sec=audio_start_sec
+        )
         
         # Handle explicit hashtags if provided, otherwise parse from caption
         hashtags = request.data.get('hashtags', [])

@@ -283,7 +283,7 @@ class StorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Story
-        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_username', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
+        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_username', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details', 'audio_start_sec']
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -379,7 +379,7 @@ class StreakUploadSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'user_display_name', 'user_avatar', 'media_url', 'media_type', 
             'caption', 'visibility', 'created_at', 'likes_count', 'comments_count', 
-            'view_count', 'is_liked', 'is_owner', 'audio_details', 'mentioned_users'
+            'view_count', 'is_liked', 'is_owner', 'audio_details', 'mentioned_users', 'audio_start_sec'
         ]
 
     def get_user_avatar(self, obj):
@@ -426,7 +426,7 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'thumbnail', 'cover_image', 'caption', 'hashtags', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details']
+        fields = ['id', 'user', 'video_url', 'thumbnail', 'cover_image', 'caption', 'hashtags', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details', 'audio_start_sec']
 
     def get_is_saved(self, obj):
         request = self.context.get('request')
@@ -582,7 +582,7 @@ class PostSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'profile_id', 'display_name', 'username', 'photo', 'gender',
             'caption', 'hashtags', 'image', 'cover_image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_saved',
-            'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio', 'audio_details'
+            'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio', 'audio_details', 'audio_start_sec'
         ]
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)

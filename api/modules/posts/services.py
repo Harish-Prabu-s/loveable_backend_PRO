@@ -43,11 +43,12 @@ import base64
 import re
 import uuid
 
-def create_post(user, caption: str, image=None, cover_image=None, visibility='all', mentions=None, additional_images=None):
+def create_post(user, caption: str, image=None, cover_image=None, visibility='all', mentions=None, additional_images=None, audio_id=None, audio_meta=None, audio_start_sec=0):
     """Create and return a new post, optionally saving an uploaded image file and processing mentions."""
-    from ...models import PostImage
+    from ...models import PostImage, Audio
     
     post = Post(user=user, caption=caption, visibility=visibility)
+    post.audio_start_sec = int(audio_start_sec or 0)
     
     # Save primary image
     if image:
@@ -76,6 +77,35 @@ def create_post(user, caption: str, image=None, cover_image=None, visibility='al
         path = default_storage.save(filename, ContentFile(cover_image.read() if hasattr(cover_image, 'read') else cover_image))
         post.cover_image = path
     
+    # Handle Audio
+    if audio_id:
+        try:
+            # First try as integer ID
+            audio = Audio.objects.get(pk=audio_id)
+            post.audio = audio
+        except (Audio.DoesNotExist, ValueError):
+            # If not found or not a number, it's an external track. Wait for audio_meta
+            pass
+
+    if not post.audio and audio_meta and isinstance(audio_meta, dict):
+        try:
+            title = audio_meta.get('title', 'Original Audio')
+            artist = audio_meta.get('artist', 'Unknown')
+            cover_url = audio_meta.get('coverArt', '')
+            ext_url = audio_meta.get('url', '')
+            
+            audio, created = Audio.objects.get_or_create(
+                title=title, artist=artist,
+                defaults={'created_by': user, 'cover_image_url': cover_url}
+            )
+            
+            if created and ext_url:
+                audio.file_url = ext_url
+                audio.save()
+            post.audio = audio
+        except Exception as e:
+            print(f"Error linking audio to post from meta: {e}")
+
     post.save()
     
     # Handle Additional Images (Multi-image posts)

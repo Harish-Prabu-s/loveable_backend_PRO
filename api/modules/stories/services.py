@@ -16,7 +16,8 @@ def get_active_stories(user):
         (models.Q(visibility='close_friends') & models.Q(user__close_friends__close_friend=user))
     ).select_related('user__profile').prefetch_related('views').order_by('-created_at').distinct()
 
-def create_story(user, media_url: str, media_type: str = 'image', visibility='all', caption: str = '', mentions=None):
+def create_story(user, media_url: str, media_type: str = 'image', visibility='all', caption: str = '', mentions=None, audio_id=None, audio_meta=None, audio_start_sec=0):
+    from ...models import Audio
     expires_at = timezone.now() + timedelta(hours=24)
     story = Story.objects.create(
         user=user, 
@@ -24,9 +25,39 @@ def create_story(user, media_url: str, media_type: str = 'image', visibility='al
         media_type=media_type, 
         expires_at=expires_at, 
         visibility=visibility,
-        caption=caption
+        caption=caption,
+        audio_start_sec=int(audio_start_sec or 0)
     )
     
+    # Handle Audio
+    if audio_id:
+        try:
+            audio = Audio.objects.get(pk=audio_id)
+            story.audio = audio
+            story.save()
+        except (Audio.DoesNotExist, ValueError):
+            pass
+
+    if not story.audio and audio_meta and isinstance(audio_meta, dict):
+        try:
+            title = audio_meta.get('title', 'Original Audio')
+            artist = audio_meta.get('artist', 'Unknown')
+            cover_url = audio_meta.get('coverArt', '')
+            ext_url = audio_meta.get('url', '')
+            
+            audio, created = Audio.objects.get_or_create(
+                title=title, artist=artist,
+                defaults={'created_by': user, 'cover_image_url': cover_url}
+            )
+            
+            if created and ext_url:
+                audio.file_url = ext_url
+                audio.save()
+            story.audio = audio
+            story.save()
+        except Exception as e:
+            print(f"Error linking audio to story from meta: {e}")
+
     # Notify Close Friends, process mentions
     from ..notifications.services import notify_close_friends_of_content
     from ..notifications.utils import handle_mentions

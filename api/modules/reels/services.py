@@ -37,12 +37,12 @@ def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False, 
         
     return qs
 
-def create_reel(user, video_url: str, caption: str = '', visibility='all', mentions=None, audio_id=None, audio_meta=None, cover_image=None):
+def create_reel(user, video_url: str, caption: str = '', visibility='all', mentions=None, audio_id=None, audio_meta=None, audio_start_sec=0, cover_image=None):
     from django.core.files.storage import default_storage
     from django.core.files.base import ContentFile
     import uuid
 
-    reel = Reel.objects.create(user=user, video_url=video_url, caption=caption, visibility=visibility)
+    reel = Reel.objects.create(user=user, video_url=video_url, caption=caption, visibility=visibility, audio_start_sec=int(audio_start_sec or 0))
     
     if cover_image:
         filename = f"reels/covers/{user.id}_{uuid.uuid4().hex[:8]}_{getattr(cover_image, 'name', 'cover.jpg')}"
@@ -55,7 +55,9 @@ def create_reel(user, video_url: str, caption: str = '', visibility='all', menti
             audio = Audio.objects.get(pk=audio_id)
             reel.audio = audio
             reel.save()
-        except Exception:
+            audio_id = audio.id
+        except (Audio.DoesNotExist, ValueError):
+            # Safe fallthrough to audio_meta handling
             pass
     elif audio_meta and isinstance(audio_meta, dict):
         try:

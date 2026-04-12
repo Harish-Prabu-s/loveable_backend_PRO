@@ -38,14 +38,45 @@ def get_user_streaks_service(user: User, request=None):
         })
     return result
 
-def upload_streak_service(user: User, media, media_type, visibility, caption: str = '', mentions=None):
+def upload_streak_service(user: User, media, media_type, visibility, caption: str = '', mentions=None, audio_id=None, audio_meta=None, audio_start_sec=0):
+    from ...models import Audio
     upload = StreakUpload.objects.create(
         user=user,
         media_url=media,
         media_type=media_type,
         visibility=visibility,
-        caption=caption
+        caption=caption,
+        audio_start_sec=int(audio_start_sec or 0)
     )
+    
+    # Handle Audio
+    if audio_id:
+        try:
+            audio = Audio.objects.get(pk=audio_id)
+            upload.audio = audio
+            upload.save()
+        except (Audio.DoesNotExist, ValueError):
+            pass
+
+    if not upload.audio and audio_meta and isinstance(audio_meta, dict):
+        try:
+            title = audio_meta.get('title', 'Original Audio')
+            artist = audio_meta.get('artist', 'Unknown')
+            cover_url = audio_meta.get('coverArt', '')
+            ext_url = audio_meta.get('url', '')
+            
+            audio, created = Audio.objects.get_or_create(
+                title=title, artist=artist,
+                defaults={'created_by': user, 'cover_image_url': cover_url}
+            )
+            
+            if created and ext_url:
+                audio.file_url = ext_url
+                audio.save()
+            upload.audio = audio
+            upload.save()
+        except Exception as e:
+            print(f"Error linking audio to streak from meta: {e}")
     
     # Increment streaks for mutual followers.
     followers = Follow.objects.filter(following=user).values_list('follower_id', flat=True)
