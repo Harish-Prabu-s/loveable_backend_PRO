@@ -8,12 +8,11 @@ from ...models import Note, Audio
 
 
 def _note_data(note, request):
-    audio_url = None
-    if note.audio and note.audio.file_url:
-        audio_url = request.build_absolute_uri(note.audio.file_url.url)
+    from ...utils import get_absolute_media_url
+    audio_url = get_absolute_media_url(note.audio.file_url, request) if note.audio else None
     avatar_url = None
     if hasattr(note.user, 'profile') and note.user.profile.photo:
-        avatar_url = request.build_absolute_uri(note.user.profile.photo.url)
+        avatar_url = get_absolute_media_url(note.user.profile.photo, request)
     return {
         'id': note.id,
         'user_id': note.user_id,
