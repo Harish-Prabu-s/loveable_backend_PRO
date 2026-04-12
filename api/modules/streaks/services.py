@@ -443,21 +443,28 @@ def get_streaks_list_service(user: User, view_type: str = 'friends', request=Non
         return []
 
 def repost_streak(user, original_streak_id):
-    """Create a repost of an existing streak upload if user is mentioned."""
+    """Create a repost of an existing streak upload if user is mentioned.
+    Returns (repost, error_code) tuple: error_code is None on success.
+    """
     try:
-        from ...models import StreakUpload
         original = StreakUpload.objects.get(id=original_streak_id)
-        if not original.mentions.filter(id=user.id).exists() and original.user != user:
-            return None
-            
-        repost = StreakUpload.objects.create(
-            user=user,
-            media_url=original.media_url,
-            media_type=original.media_type,
-            caption=original.caption,
-            visibility='all',
-            reposted_from=original
-        )
-        return repost
     except StreakUpload.DoesNotExist:
-        return None
+        return None, 'deleted'
+
+    # Block if streak upload is older than 24 hours
+    from datetime import timedelta
+    if timezone.now() - original.created_at > timedelta(hours=24):
+        return None, 'expired'
+
+    if not original.mentions.filter(id=user.id).exists() and original.user != user:
+        return None, 'not_mentioned'
+
+    repost = StreakUpload.objects.create(
+        user=user,
+        media_url=original.media_url,
+        media_type=original.media_type,
+        caption=original.caption,
+        visibility='all',
+        reposted_from=original
+    )
+    return repost, None

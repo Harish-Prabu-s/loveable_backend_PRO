@@ -214,10 +214,12 @@ def delete_story_view(request, story_id: int):
 @permission_classes([IsAuthenticated])
 def repost_story_view(request, story_id: int):
     from .services import repost_story
-    story = repost_story(request.user, story_id)
+    story, error = repost_story(request.user, story_id)
     if not story:
-        return Response({'error': 'story not found'}, status=404)
-        
+        msg = 'This story has expired.' if error == 'expired' else (
+              'This story has been deleted.' if error == 'deleted' else 'Cannot repost.')
+        return Response({'error': msg}, status=410 if error == 'expired' else 404)
+
     # Notify original owner
     if story.reposted_from and story.reposted_from.user != request.user:
         from ..notifications.repost_service import notify_content_repost

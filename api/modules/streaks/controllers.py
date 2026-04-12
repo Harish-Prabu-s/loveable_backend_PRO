@@ -202,10 +202,13 @@ def view_streak_view(request, upload_id: int):
 @permission_classes([IsAuthenticated])
 def repost_streak_view(request, upload_id: int):
     from .services import repost_streak
-    repost = repost_streak(request.user, upload_id)
+    repost, error = repost_streak(request.user, upload_id)
     if not repost:
-        return Response({'error': 'streak not found'}, status=404)
-        
+        msg = 'This streak has expired (24hr limit).' if error == 'expired' else (
+              'This streak has been deleted.' if error == 'deleted' else (
+              'You are not mentioned in this streak.' if error == 'not_mentioned' else 'Cannot repost.'))
+        return Response({'error': msg}, status=410 if error == 'expired' else (404 if error == 'deleted' else 403))
+
     # Notify original owner
     if repost.reposted_from and repost.reposted_from.user != request.user:
         from ..notifications.repost_service import notify_content_repost

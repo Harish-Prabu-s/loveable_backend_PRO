@@ -257,20 +257,27 @@ def share_post(post_id: int, user, target_user_id: int, request=None):
         return False
 
 def repost_post(user, original_post_id):
-    """Create a repost of an existing post if the user is mentioned."""
+    """Create a repost of an existing post if the user is mentioned.
+    Returns (repost, error_code) tuple: error_code is None on success.
+    """
     try:
         original = Post.objects.get(id=original_post_id)
-        # Only allow if mentioned or is the owner (though usually it's for non-owners)
-        if not original.mentions.filter(id=user.id).exists() and original.user != user:
-            return None
-            
-        repost = Post.objects.create(
-            user=user,
-            caption=original.caption,
-            image=original.image,
-            visibility='all',
-            reposted_from=original
-        )
-        return repost
     except Post.DoesNotExist:
-        return None
+        return None, 'deleted'
+
+    # Block repost if post is archived by owner
+    if original.is_archived:
+        return None, 'deleted'
+
+    # Only allow if mentioned or is the owner
+    if not original.mentions.filter(id=user.id).exists() and original.user != user:
+        return None, 'not_mentioned'
+
+    repost = Post.objects.create(
+        user=user,
+        caption=original.caption,
+        image=original.image,
+        visibility='all',
+        reposted_from=original
+    )
+    return repost, None

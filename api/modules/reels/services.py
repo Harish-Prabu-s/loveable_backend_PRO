@@ -216,22 +216,29 @@ def unarchive_reel(reel_id: int, user: User):
         return False
 
 def repost_reel(user, original_reel_id):
-    """Create a repost of an existing reel if the user is mentioned."""
+    """Create a repost of an existing reel if the user is mentioned.
+    Returns (repost, error_code) tuple: error_code is None on success.
+    """
     try:
         original = Reel.objects.get(id=original_reel_id)
-        if not original.mentions.filter(id=user.id).exists() and original.user != user:
-            return None
-            
-        repost = Reel.objects.create(
-            user=user,
-            video_url=original.video_url,
-            caption=original.caption,
-            visibility='all',
-            reposted_from=original
-        )
-        return repost
     except Reel.DoesNotExist:
-        return None
+        return None, 'deleted'
+
+    # Block if reel is archived
+    if original.is_archived:
+        return None, 'deleted'
+
+    if not original.mentions.filter(id=user.id).exists() and original.user != user:
+        return None, 'not_mentioned'
+
+    repost = Reel.objects.create(
+        user=user,
+        video_url=original.video_url,
+        caption=original.caption,
+        visibility='all',
+        reposted_from=original
+    )
+    return repost, None
 
 def get_reel_by_id(pk: int):
     try:

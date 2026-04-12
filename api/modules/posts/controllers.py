@@ -294,10 +294,12 @@ def post_detail_view(request, post_id: int):
 @permission_classes([IsAuthenticated])
 def repost_view(request, post_id: int):
     from .services import repost_post
-    post = repost_post(request.user, post_id)
+    post, error = repost_post(request.user, post_id)
     if not post:
-        return Response({'error': 'post not found'}, status=404)
-        
+        msg = 'This post has been deleted.' if error == 'deleted' else (
+              'You are not mentioned in this post.' if error == 'not_mentioned' else 'Cannot repost.')
+        return Response({'error': msg}, status=404 if error == 'deleted' else 403)
+
     # Notify original owner
     if post.reposted_from and post.reposted_from.user != request.user:
         from ..notifications.repost_service import notify_content_repost

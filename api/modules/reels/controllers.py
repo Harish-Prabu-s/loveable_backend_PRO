@@ -337,10 +337,12 @@ def delete_reel_view(request, pk: int):
 @permission_classes([IsAuthenticated])
 def repost_reel_view(request, pk: int):
     from .services import repost_reel
-    reel = repost_reel(request.user, pk)
+    reel, error = repost_reel(request.user, pk)
     if not reel:
-        return Response({'error': 'reel not found'}, status=404)
-        
+        msg = 'This reel has been deleted.' if error == 'deleted' else (
+              'You are not mentioned in this reel.' if error == 'not_mentioned' else 'Cannot repost.')
+        return Response({'error': msg}, status=404 if error == 'deleted' else 403)
+
     # Notify original owner
     if reel.reposted_from and reel.reposted_from.user != request.user:
         from ..notifications.repost_service import notify_content_repost
