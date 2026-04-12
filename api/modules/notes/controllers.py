@@ -26,6 +26,9 @@ def _note_data(note, request):
         'audio_start_sec': note.audio_start_sec,
         'expires_at': note.expires_at.isoformat() if note.expires_at else None,
         'created_at': note.created_at.isoformat(),
+        'likes_count': note.likes.count() if hasattr(note, 'likes') else 0,
+        'is_liked': note.likes.filter(user=request.user).exists() if hasattr(note, 'likes') else False,
+        'mentions': list(note.mentions.values_list('id', flat=True)) if hasattr(note, 'mentions') else [],
     }
 
 
@@ -72,6 +75,35 @@ def set_note(request):
             'expires_at': expires_at,
         }
     )
+    
+    # Handle mentions
+    import re
+    from django.contrib.auth.models import User
+    mention_usernames = [m.strip('@') for m in re.findall(r'@\w+', text)]
+    if mention_usernames:
+        mentioned_users = User.objects.filter(username__in=mention_usernames)
+        note.mentions.set(mentioned_users)
+        
+        # Notify mentioned users
+        from ..notifications.push_service import send_push_notification, _get_user_tokens
+        from ..notifications.services import create_notification
+        profile = getattr(request.user, 'profile', None)
+        sender_name = profile.display_name if profile else request.user.username
+        for u in mentioned_users:
+            if u != request.user:
+                create_notification(
+                    recipient=u,
+                    actor=request.user,
+                    notification_type='note_mention',
+                    message=f"{sender_name} mentioned you in their note.",
+                    object_id=note.id
+                )
+                tokens = _get_user_tokens(u.id)
+                if tokens:
+                    send_push_notification(tokens, title="New Mention", body=f"{sender_name} mentioned you in their note.", data={'type': 'note_mention'})
+    else:
+        note.mentions.clear()
+
     return Response({'note': _note_data(note, request)})
 
 
@@ -101,3 +133,42 @@ def list_friend_notes(request):
     active_notes = [n for n in notes if not n.expires_at or n.expires_at > now]
 
     return Response([_note_data(n, request) for n in active_notes])
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def like_note_view(request, pk: int):
+    from ...models import NoteLike
+    try:
+        note = Note.objects.get(pk=pk)
+    except Note.DoesNotExist:
+        return Response({'error': 'Note not found'}, status=404)
+        
+    like, created = NoteLike.objects.get_or_create(note=note, user=request.user)
+    if not created:
+        like.delete()
+        return Response({'liked': False, 'likes_count': note.likes.count()})
+        
+    # Send Notification
+    if note.user != request.user:
+        from ..notifications.push_service import send_push_notification, _get_user_tokens
+        from ..notifications.services import create_notification
+        profile = getattr(request.user, 'profile', None)
+        sender_name = profile.display_name if profile else request.user.username
+        
+        create_notification(
+            recipient=note.user,
+            actor=request.user,
+            notification_type='note_like',
+            message=f"{sender_name} liked your note.",
+            object_id=note.id
+        )
+        tokens = _get_user_tokens(note.user.id)
+        if tokens:
+            send_push_notification(
+                tokens, 
+                title="Note Liked", 
+                body=f"{sender_name} liked your note.", 
+                data={'type': 'note_like'}
+            )
+            
+    return Response({'liked': True, 'likes_count': note.likes.count()})

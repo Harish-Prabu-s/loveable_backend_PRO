@@ -3,7 +3,7 @@ from ..chat.services import get_or_create_room
 
 from django.db import models
 
-def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False, hashtag: str = None):
+def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False, search: str = None):
     offset = (page - 1) * limit
     from django.db.models import Count, F
     
@@ -15,9 +15,12 @@ def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False, 
         )
     )
 
-    if hashtag:
-        hashtag = hashtag.lstrip('#').lower()
-        qs = qs.filter(hashtags__name=hashtag)
+    if search:
+        search = search.lower().strip()
+        if search.startswith('#'):
+            qs = qs.filter(hashtags__name__icontains=search.lstrip('#'))
+        else:
+            qs = qs.filter(models.Q(caption__icontains=search) | models.Q(hashtags__name__icontains=search))
 
     qs = qs.annotate(
         lcount=Count('likes', distinct=True),

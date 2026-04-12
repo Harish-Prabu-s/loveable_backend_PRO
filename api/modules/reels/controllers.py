@@ -25,9 +25,9 @@ def list_reels_view(request):
         page, limit = 1, 10
         
     random_flag = request.GET.get('random', 'false').lower() == 'true'
-    hashtag = request.GET.get('hashtag')
+    search = request.GET.get('search')
     
-    qs = list_reels(user=request.user, limit=limit, page=page, random_flag=random_flag, hashtag=hashtag)
+    qs = list_reels(user=request.user, limit=limit, page=page, random_flag=random_flag, search=search)
     return Response(ReelSerializer(qs, many=True, context={'request': request}).data)
 
 

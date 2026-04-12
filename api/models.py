@@ -761,6 +761,7 @@ class Note(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='note')
     text = models.CharField(max_length=60, blank=True)
     audio = models.ForeignKey(Audio, on_delete=models.SET_NULL, null=True, blank=True, related_name='notes')
+    mentions = models.ManyToManyField(User, related_name='mentioned_in_notes', blank=True)
     audio_start_sec = models.IntegerField(default=0)
     expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -768,6 +769,14 @@ class Note(models.Model):
 
     def __str__(self):
         return f"Note by {self.user.username}: {self.text[:30]}"
+
+class NoteLike(models.Model):
+    note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name='likes')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('note', 'user')
 
 
 # ── Multi-Image Posts ────────────────────────────────────────────────────────

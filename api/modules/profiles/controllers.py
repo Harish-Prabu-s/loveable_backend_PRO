@@ -77,6 +77,7 @@ def list_profiles_view(request):
     is_online = request.GET.get('is_online')
     is_busy = request.GET.get('is_busy')
     relationship = request.GET.get('relationship') # 'friends' for mentions
+    new_users = request.GET.get('new_users')
     
     # Base queryset: exclude self
     qs = Profile.objects.exclude(user=request.user).select_related('user')
@@ -116,6 +117,9 @@ def list_profiles_view(request):
         # to avoid joining with the Room table every time.
         qs = qs.exclude(user__rooms_started__status__in=['pending', 'active'])
         qs = qs.exclude(user__rooms_received__status__in=['pending', 'active'])
+        
+    if new_users == 'true':
+        qs = qs.order_by('-user__date_joined')
         
     return Response(ProfileSerializer(qs, many=True, context={'request': request}).data)
 
@@ -197,3 +201,19 @@ def share_profile_view(request, user_id: int):
     if 'error' in result:
         return Response({'error': result['error']}, status=result['status'])
     return Response({'success': True})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def mutual_connections_view(request, user_id: int):
+    from ...models import Follow, Profile
+    # People the target user follows
+    target_following = Follow.objects.filter(follower_id=user_id).values_list('following_id', flat=True)
+    # People the request user follows
+    my_following = Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+    
+    # Mutual ids
+    mutual_ids = set(target_following).intersection(set(my_following))
+    
+    profiles = Profile.objects.filter(user_id__in=mutual_ids).select_related('user')
+    data = ProfileSerializer(profiles, many=True, context={'request': request}).data
+    return Response({"count": len(mutual_ids), "results": data})
