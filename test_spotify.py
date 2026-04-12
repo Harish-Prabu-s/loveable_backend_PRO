@@ -28,10 +28,15 @@ def diagnostic():
     if token:
         print("SUCCESS: Got access token.")
         print("Attempting to search for 'Top Hits'...")
-        results = client.search_tracks("Top Hits")
-        print(f"Found {len(results)} tracks.")
-        if results:
-            for i, track in enumerate(results[:3]):
+        results = client.search_spotify("Top Hits", limit=3)
+        print(f"Found {len(results.get('tracks', []))} tracks.")
+        print(f"Found {len(results.get('artists', []))} artists.")
+        print(f"Found {len(results.get('albums', []))} albums.")
+        
+        tracks = results.get('tracks', [])
+        if tracks:
+            print("\nTop Tracks:")
+            for i, track in enumerate(tracks[:3]):
                 print(f" {i+1}. {track['title']} by {track['artist']}")
     else:
         print("FAILED: Could not get access token. Check your credentials.")

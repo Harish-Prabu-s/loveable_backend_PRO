@@ -40,23 +40,29 @@ class SpotifyClient:
     def search_spotify(self, query, types=['track', 'artist', 'album'], limit=20):
         token = self.get_access_token()
         if not token:
+            print("ERROR: No token obtained.")
             return {"tracks": [], "artists": [], "albums": []}
 
-        response = requests.get(
-            f"{self.base_url}/search",
-            params={
-                'q': query, 
-                'type': ','.join(types), 
-                'limit': limit,
-                'include_external': 'audio'
-            },
-            headers={'Authorization': f'Bearer {token}'}
-        )
-
+        url = f"{self.base_url}/search"
+        params = {
+            'q': query, 
+            'type': ','.join(types), 
+            'limit': limit,
+            'include_external': 'audio'
+        }
+        headers = {'Authorization': f'Bearer {token}'}
+        
+        print(f"DEBUG: Hitting {url} with params {params}")
+        response = requests.get(url, params=params, headers=headers)
+        
+        print(f"DEBUG: Status Code: {response.status_code}")
         if response.status_code != 200:
+            print(f"DEBUG: Response Body: {response.text}")
             return {"tracks": [], "artists": [], "albums": []}
 
         data = response.json()
+        print(f"DEBUG: Response received. Track items: {len(data.get('tracks', {}).get('items', []))}")
+        
         results = {
             "tracks": [],
             "artists": [],
