@@ -321,7 +321,9 @@ class CallSession(models.Model):
         ('LIVE', 'Live'),
     )
     caller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='calls_made')
-    callee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='calls_received')
+    callee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='calls_received', null=True, blank=True)
+    participants = models.ManyToManyField(User, related_name='active_calls_participated', blank=True)
+    is_group = models.BooleanField(default=False)
     call_type = models.CharField(max_length=10, choices=CALL_TYPE_CHOICES)
     room_id = models.CharField(max_length=50, null=True, blank=True)
     duration_seconds = models.IntegerField(default=0)

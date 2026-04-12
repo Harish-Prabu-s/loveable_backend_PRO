@@ -139,8 +139,16 @@ def end_call(session: CallSession) -> dict:
         print(f"Error processing call coin transaction: {e}")
 
     # Update league stats for both participants
+    now = timezone.now()
     current_month = now.month
-    for user in [session.caller, session.callee]:
+    duration_s = session.duration_seconds
+    coins_spent = session.coins_spent
+
+    users_to_update = [session.caller]
+    if session.callee:
+        users_to_update.append(session.callee)
+        
+    for user in users_to_update:
         stats, created = LeagueStats.objects.get_or_create(user=user)
         
         # Monthly Reset Logic
@@ -158,7 +166,7 @@ def end_call(session: CallSession) -> dict:
             stats.total_audio_seconds += duration_s
             stats.monthly_audio_seconds += duration_s
             
-        if user == session.callee:
+        if session.callee and user == session.callee:
             stats.total_calls_received += 1
             if duration_s > stats.longest_call_seconds:
                 stats.longest_call_seconds = duration_s
@@ -166,10 +174,82 @@ def end_call(session: CallSession) -> dict:
         stats.save()
 
     # Mark callee as not busy
-    session.callee.profile.is_busy = False
-    session.callee.profile.save(update_fields=['is_busy'])
+    if session.callee:
+        session.callee.profile.is_busy = False
+        session.callee.profile.save(update_fields=['is_busy'])
 
     return {
         'duration_seconds': duration_s,
         'coins_spent': coins_spent,
     }
+
+
+def initiate_group_call(caller, room_id_obj, call_type: str, room_id: str = None) -> CallSession:
+    """
+    Initiate a call for a group room.
+    room_id_obj: Primary key of the Room model
+    room_id: WebRTC room ID (string)
+    """
+    from api.models import Room
+    try:
+        room = Room.objects.get(id=room_id_obj, is_group=True)
+    except Room.DoesNotExist:
+        raise ValueError("Invalid room ID or room is not a group.")
+
+    # Get members
+    members = room.members.all().select_related('user__profile')
+    
+    if call_type == 'VOICE':
+        action = 'audio_call'
+    else:
+        action = 'video_call'
+        
+    coins_per_min = get_call_cost_per_min(action)
+    
+    session = CallSession.objects.create(
+        caller=caller,
+        is_group=True,
+        call_type=call_type,
+        room_id=room_id,
+        coins_per_min=coins_per_min,
+        started_at=timezone.now(),
+    )
+    
+    # Add participants
+    for member in members:
+        session.participants.add(member.user)
+        # Notify via WebSocket
+        if member.user.id != caller.id:
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'call_{member.user.id}',
+                {
+                    'type': 'incoming_call',
+                    'content': {
+                        'type': 'incoming-call',
+                        'sessionId': session.id,
+                        'roomId': session.room_id,
+                        'callerId': caller.id,
+                        'callerName': caller.profile.display_name if hasattr(caller, 'profile') else caller.username,
+                        'callerPhoto': caller.profile.photo.url if hasattr(caller, 'profile') and caller.profile.photo else None,
+                        'callType': call_type.lower(),
+                        'isGroup': True,
+                        'groupName': room.name
+                    }
+                }
+            )
+            # Push notification
+            try:
+                from ..notifications.fcm_service import send_call_notification
+                caller_name = caller.profile.display_name if hasattr(caller, 'profile') else caller.username
+                send_call_notification(
+                    caller_name,
+                    member.user.id,
+                    room_id or str(session.id),
+                    call_type.lower()
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Failed to send group call FCM: {e}")
+
+    return session

@@ -10,7 +10,29 @@ from rest_framework import status
 from django.contrib.auth.models import User
 from api.models import CallSession
 from .serializers import CallSessionSerializer
-from .services import initiate_call, end_call, accept_call
+from .services import initiate_call, end_call, accept_call, initiate_group_call
+
+
+class InitiateGroupCallView(APIView):
+    """POST /api/calls/initiate-group/ — start a group call session."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        room_id_obj = request.data.get('room_id')
+        call_type = request.data.get('call_type', 'VOICE').upper()  # VOICE or VIDEO
+        room_id = request.data.get('signal_room_id') or request.data.get('room_id')
+
+        if not room_id_obj:
+            return Response({'detail': 'room_id required.'}, status=400)
+        
+        try:
+            session = initiate_group_call(request.user, room_id_obj, call_type, str(room_id))
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=400)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=500)
+
+        return Response(CallSessionSerializer(session).data, status=201)
 
 
 class InitiateCallView(APIView):

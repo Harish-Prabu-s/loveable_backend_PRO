@@ -20,7 +20,7 @@ def create_room_view(request):
         if not receiver_id:
             return Response({'error': 'receiver_id required'}, status=400)
         room = get_or_create_room(request.user, int(receiver_id), call_type)
-        return Response(RoomSerializer(room).data, status=201)
+        return Response(RoomSerializer(room, context={'request': request}).data, status=201)
     except Exception as e:
         return Response({'error': str(e)}, status=400)
 
@@ -41,7 +41,7 @@ def room_detail_view(request, room_id: int):
         if not is_member:
             return Response({'error': 'forbidden'}, status=403)
             
-        return Response(RoomSerializer(room).data)
+        return Response(RoomSerializer(room, context={'request': request}).data)
     except Room.DoesNotExist:
         return Response({'error': 'Room not found'}, status=404)
     except Exception as e:
@@ -51,7 +51,7 @@ def room_detail_view(request, room_id: int):
 @permission_classes([IsAuthenticated])
 def my_rooms_view(request):
     qs = list_my_rooms(request.user)
-    return Response(RoomSerializer(qs, many=True).data)
+    return Response(RoomSerializer(qs, many=True, context={'request': request}).data)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -94,7 +94,7 @@ def toggle_disappearing_view(request, room_id: int):
         room.disappearing_timer = timer
         room.save()
         
-        return Response(RoomSerializer(room).data)
+        return Response(RoomSerializer(room, context={'request': request}).data)
     except Room.DoesNotExist:
         return Response({'error': 'Room not found'}, status=404)
     except Exception as e:
@@ -130,7 +130,7 @@ def start_call_view(request, room_id: int):
         return Response({'error': 'not_found'}, status=404)
     if room.caller != request.user and room.receiver != request.user:
         return Response({'error': 'forbidden'}, status=403)
-    return Response(RoomSerializer(room).data)
+    return Response(RoomSerializer(room, context={'request': request}).data)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -142,7 +142,7 @@ def end_call_view(request, room_id: int):
         return Response({'error': 'not_found'}, status=404)
     if room.caller != request.user and room.receiver != request.user:
         return Response({'error': 'forbidden'}, status=403)
-    return Response(RoomSerializer(room).data)
+    return Response(RoomSerializer(room, context={'request': request}).data)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -285,7 +285,7 @@ def create_group_view(request):
             return Response({'error': 'Group name required'}, status=400)
             
         room = create_group_room(request.user, name, user_ids, avatar)
-        return Response(RoomSerializer(room).data, status=201)
+        return Response(RoomSerializer(room, context={'request': request}).data, status=201)
     except Exception as e:
         return Response({'error': str(e)}, status=400)
 

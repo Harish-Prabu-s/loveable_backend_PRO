@@ -3,6 +3,7 @@ from . import controllers
 
 urlpatterns = [
     path('initiate/', controllers.InitiateCallView.as_view()),
+    path('initiate-group/', controllers.InitiateGroupCallView.as_view()),
     path('accept/', controllers.AcceptCallView.as_view()),
     path('end/', controllers.EndCallView.as_view()),
     path('logs/', controllers.CallLogsView.as_view()),
