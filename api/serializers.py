@@ -188,10 +188,50 @@ class MessageReactionSerializer(serializers.ModelSerializer):
 class MessageSerializer(serializers.ModelSerializer):
     reply_to = serializers.SerializerMethodField()
     reactions = MessageReactionSerializer(many=True, read_only=True)
-    
+    sender = serializers.SerializerMethodField()
+    seen_by_users = serializers.SerializerMethodField()
+
     class Meta:
         model = Message
-        fields = ['id', 'room', 'sender', 'content', 'type', 'media_url', 'duration_seconds', 'created_at', 'is_seen', 'seen_at', 'expires_at', 'reply_to', 'reactions']
+        fields = ['id', 'room', 'sender', 'content', 'type', 'media_url',
+                  'duration_seconds', 'created_at', 'is_seen', 'seen_at',
+                  'expires_at', 'reply_to', 'reactions', 'seen_by_users']
+
+    def _sender_data(self, user):
+        """Return minimal sender info needed by the frontend."""
+        if not user:
+            return None
+        profile = getattr(user, 'profile', None)
+        request = self.context.get('request')
+        photo_url = None
+        if profile and profile.photo:
+            photo_url = request.build_absolute_uri(profile.photo.url) if request else profile.photo.url
+        return {
+            'id': user.id,
+            'username': user.username,
+            'display_name': profile.display_name if profile else user.username,
+            'photo': photo_url,
+        }
+
+    def get_sender(self, obj):
+        return self._sender_data(obj.sender)
+
+    def get_seen_by_users(self, obj):
+        seen_list = obj.seen_by_users.select_related('user__profile').all()
+        result = []
+        request = self.context.get('request')
+        for sv in seen_list:
+            profile = getattr(sv.user, 'profile', None)
+            photo_url = None
+            if profile and profile.photo:
+                photo_url = request.build_absolute_uri(profile.photo.url) if request else profile.photo.url
+            result.append({
+                'id': sv.user.id,
+                'display_name': profile.display_name if profile else sv.user.username,
+                'photo': photo_url,
+                'seen_at': sv.seen_at,
+            })
+        return result
 
     def get_reply_to(self, obj):
         if obj.reply_to:
@@ -199,8 +239,8 @@ class MessageSerializer(serializers.ModelSerializer):
                 'id': obj.reply_to.id,
                 'content': obj.reply_to.content,
                 'type': obj.reply_to.type,
-                'sender': obj.reply_to.sender.id,
-                'created_at': obj.reply_to.created_at
+                'sender': self._sender_data(obj.reply_to.sender),
+                'created_at': obj.reply_to.created_at,
             }
         return None
 

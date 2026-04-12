@@ -82,14 +82,30 @@ def list_my_rooms(user: User):
     
     return (private_rooms | group_rooms).distinct().order_by('-created_at')
 
-def list_messages(room_id: int):
+def list_messages(room_id: int, limit: int = 30, before_id: int = None):
     room = Room.objects.get(id=room_id)
     now = timezone.now()
 
-    # Expire messages that have passed expires_at
+    # Expire messages past expires_at
     Message.objects.filter(room_id=room_id, expires_at__lt=now).delete()
 
-    return Message.objects.filter(room_id=room_id).order_by('created_at')
+    qs = Message.objects.filter(room_id=room_id) \
+        .select_related('sender__profile', 'reply_to__sender__profile') \
+        .prefetch_related('reactions', 'seen_by_users__user__profile') \
+        .order_by('-created_at')   # newest first for cursor pagination
+
+    if before_id:
+        # Return messages older than before_id (scroll-up to load history)
+        try:
+            pivot = Message.objects.get(id=before_id, room_id=room_id)
+            qs = qs.filter(created_at__lt=pivot.created_at)
+        except Message.DoesNotExist:
+            pass
+
+    # Take a page then reverse so the UI gets chronological order
+    page = list(qs[:limit])
+    page.reverse()
+    return page
 
 def mark_messages_seen(room_id: int, user: User):
     try:

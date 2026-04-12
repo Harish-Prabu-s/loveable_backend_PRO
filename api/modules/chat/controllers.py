@@ -56,8 +56,21 @@ def my_rooms_view(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def messages_view(request, room_id: int):
-    qs = list_messages(room_id)
-    return Response(MessageSerializer(qs, many=True).data)
+    try:
+        limit = int(request.GET.get('limit', 30))
+        before_id = request.GET.get('before_id')   # cursor: load older messages
+        before_id = int(before_id) if before_id else None
+
+        qs = list_messages(room_id, limit=limit, before_id=before_id)
+        serializer = MessageSerializer(qs, many=True, context={'request': request})
+        return Response({
+            'results': serializer.data,
+            'has_more': len(qs) >= limit,   # if we got a full page, likely more exist
+        })
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'messages_view error: {e}')
+        return Response({'results': [], 'has_more': False})
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -101,7 +114,7 @@ def send_message_view(request, room_id: int):
             return Response({'error': 'content or media required'}, status=400)
             
         msg = send_message(room_id, request.user, content or '', msg_type, media_url, duration_seconds, reply_to_id)
-        return Response(MessageSerializer(msg).data, status=201)
+        return Response(MessageSerializer(msg, context={'request': request}).data, status=201)
     except Exception as e:
         if str(e) == "Insufficient coins":
             return Response({'error': 'Insufficient coins'}, status=402)
