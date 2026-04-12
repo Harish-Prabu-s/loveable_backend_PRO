@@ -93,10 +93,18 @@ def notify_new_message(sender, instance, created, **kwargs):
     if created:
         actor = instance.sender
         room = instance.room
-        recipient = room.receiver if room.caller == actor else room.caller
-        # We only skip if the recipient is the actor (shouldn't happen) or if we later add a more robust "is_viewing" check
-        if actor == recipient: return
-        send_action_notification(actor.username, recipient.id, 'chat_message', object_id=room.id, extra_data={'body': instance.content[:50]})
+        
+        recipients = []
+        if room.is_group:
+            recipients = [m.user for m in room.members.exclude(user=actor)]
+        else:
+            other_user = room.receiver if room.caller == actor else room.caller
+            if other_user:
+                recipients.append(other_user)
+
+        for recipient in recipients:
+            if getattr(recipient, 'id', None) and recipient != actor:
+                send_action_notification(actor.username, recipient.id, 'chat_message', object_id=room.id, extra_data={'body': str(instance.content)[:50]})
 
 @receiver(post_save, sender=Streak)
 def notify_streak_milestone(sender, instance, created, **kwargs):

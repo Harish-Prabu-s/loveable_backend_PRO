@@ -119,7 +119,7 @@ def send_message_view(request, room_id: int):
         if str(e) == "Insufficient coins":
             return Response({'error': 'Insufficient coins'}, status=402)
         import logging
-        logging.getLogger(__name__).error(f"Error sending message: {e}")
+        logging.getLogger(__name__).exception("Error sending message")
         return Response({'error': 'Failed to send message'}, status=400)
 
 @api_view(['POST'])
