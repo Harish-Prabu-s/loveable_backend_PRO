@@ -49,6 +49,41 @@ class AudioViewSet(viewsets.ModelViewSet):
         
         return Response({'status': 'favorited', 'is_favorite': True})
 
+    @action(detail=False, methods=['get'])
+    def spotify_search(self, request):
+        query = request.query_params.get('q', '').strip()
+        if not query:
+            return Response([])
+        
+        from .spotify_service import SpotifyClient
+        client = SpotifyClient()
+        results = client.search_tracks(query)
+        return Response(results)
+
+    @action(detail=False, methods=['post'])
+    def import_spotify_track(self, request):
+        track_data = request.data
+        external_id = track_data.get('external_id')
+        
+        if not external_id:
+            return Response({'error': 'external_id required'}, status=400)
+            
+        # Check if already exists
+        audio = Audio.objects.filter(external_id=external_id).first()
+        if not audio:
+            audio = Audio.objects.create(
+                title=track_data.get('title', 'Unknown'),
+                artist=track_data.get('artist', 'Unknown'),
+                cover_image_url=track_data.get('cover_image_url', ''),
+                file_url=track_data.get('file_url', ''),
+                duration_ms=track_data.get('duration_ms', 0),
+                external_id=external_id,
+                created_by=request.user
+            )
+        
+        serializer = AudioSerializer(audio, context={'request': request})
+        return Response(serializer.data, status=201)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_audios_view(request):

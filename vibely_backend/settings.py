@@ -247,6 +247,10 @@ PRISMSWIFT_TOKEN = os.environ.get('PRISMSWIFT_TOKEN', '')
 EBDSMS_API_KEY = os.environ.get('EBDSMS_API_KEY', '')
 EBDSMS_DEVICE_ID = os.environ.get('EBDSMS_DEVICE_ID', '')
 
+# Spotify Settings
+SPOTIFY_CLIENT_ID = os.environ.get('SPOTIFY_CLIENT_ID', '')
+SPOTIFY_CLIENT_SECRET = os.environ.get('SPOTIFY_CLIENT_SECRET', '')
+
 # Fast2SMS Settings
 FAST2SMS_API_KEY = os.environ.get('FAST2SMS_API_KEY', '')
 

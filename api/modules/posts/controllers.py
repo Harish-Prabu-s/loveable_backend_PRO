@@ -117,8 +117,6 @@ def create_post_view(request):
             return Response({'error': 'caption or image required', 'debug_files': list(request.FILES.keys()), 'debug_data': list(request.data.keys())}, status=400)
 
         cover_image = request.FILES.get('cover_image')
-        if not cover_image:
-             return Response({'error': 'Cover image is mandatory'}, status=400)
 
         visibility = request.data.get('visibility', 'all')
         mentions = request.data.get('mentions', [])
