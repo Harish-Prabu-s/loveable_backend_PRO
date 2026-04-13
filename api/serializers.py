@@ -489,6 +489,7 @@ class GiftTransactionSerializer(serializers.ModelSerializer):
 
 class ContactSerializer(serializers.Serializer):
     id = serializers.IntegerField() # User ID for 1v1, Room ID for Groups
+    user_id = serializers.IntegerField(required=False, allow_null=True)
     username = serializers.CharField(required=False, allow_null=True)
     display_name = serializers.SerializerMethodField()
     photo = serializers.SerializerMethodField()

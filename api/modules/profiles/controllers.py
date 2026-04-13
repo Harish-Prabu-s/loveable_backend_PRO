@@ -198,13 +198,15 @@ def list_profiles_view(request):
         qs = qs.filter(is_online=True)
         
     if is_busy == 'false':
-        # Efficiency hint: for millions of users, this should be a cached 'is_busy' flag on the Profile model itself
-        # to avoid joining with the Room table every time.
         qs = qs.exclude(user__rooms_started__status__in=['pending', 'active'])
         qs = qs.exclude(user__rooms_received__status__in=['pending', 'active'])
         
     if new_users == 'true':
         qs = qs.order_by('-user__date_joined')
+
+    if request.GET.get('popular_users') == 'true':
+        from django.db.models import Count
+        qs = qs.annotate(follower_count=Count('user__followers')).order_by('-follower_count')
         
     return Response(ProfileSerializer(qs, many=True, context={'request': request}).data)
 

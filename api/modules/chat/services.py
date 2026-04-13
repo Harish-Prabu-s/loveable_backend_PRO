@@ -481,16 +481,21 @@ def react_message(message_id: int, user: User, emoji: str):
         msg = Message.objects.get(id=message_id)
         room = msg.room
         
-        # Toggle logic: if user already reacted with SAME emoji, remove it.
-        # If they reacted with DIFFERENT emoji, we can either add another OR replace.
-        # Common pattern: one reaction per user per message (replacing if different).
-        # But unique_together says (message, user, emoji). Let's stick to toggle.
+        # One reaction per user: if user already has ANY reaction, we handle it
+        existing_any = MessageReaction.objects.filter(message=msg, user=user).first()
         
-        existing = MessageReaction.objects.filter(message=msg, user=user, emoji=emoji).first()
-        if existing:
-            existing.delete()
-            action = 'removed'
+        if existing_any:
+            if existing_any.emoji == emoji:
+                # Toggle off: same emoji means remove
+                existing_any.delete()
+                action = 'removed'
+            else:
+                # Update: different emoji means replace
+                existing_any.emoji = emoji
+                existing_any.save()
+                action = 'added'
         else:
+            # New reaction
             MessageReaction.objects.create(message=msg, user=user, emoji=emoji)
             action = 'added'
             

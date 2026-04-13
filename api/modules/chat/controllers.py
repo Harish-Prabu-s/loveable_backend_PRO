@@ -195,6 +195,7 @@ def contact_list_view(request):
             # Use dot notation for serializer compatibility
             other_user.is_group = False
             other_user.room_id = room.id
+            other_user.user_id = other_user.id
             other_user.contact_id = room.id # Use room.id as the unique ID for the list
             other_user.last_message = last_msg.content
             other_user.last_message_type = last_msg.type
