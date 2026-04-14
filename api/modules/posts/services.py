@@ -81,10 +81,11 @@ def create_post(user, caption: str, image=None, cover_image=None, visibility='al
     if audio_id:
         try:
             # First try as integer ID
-            audio = Audio.objects.get(pk=audio_id)
-            post.audio = audio
-        except (Audio.DoesNotExist, ValueError):
-            # If not found or not a number, it's an external track. Wait for audio_meta
+            audio = Audio.objects.filter(pk=audio_id).first()
+            if audio:
+                post.audio = audio
+        except Exception:
+            # If not a valid ID format, ignore
             pass
 
     if not post.audio and audio_meta and isinstance(audio_meta, dict):
@@ -94,14 +95,24 @@ def create_post(user, caption: str, image=None, cover_image=None, visibility='al
             cover_url = audio_meta.get('coverArt', '')
             ext_url = audio_meta.get('url', '')
             
-            audio, created = Audio.objects.get_or_create(
-                title=title, artist=artist,
-                defaults={'created_by': user, 'cover_image_url': cover_url}
-            )
+            # Use filter().first() instead of get_or_create to satisfy uniqueness safely
+            audio = Audio.objects.filter(title=title, artist=artist).first()
+            created = False
             
-            if created and ext_url:
+            if not audio:
+                audio = Audio.objects.create(
+                    title=title, 
+                    artist=artist,
+                    created_by=user, 
+                    cover_image_url=cover_url
+                )
+                created = True
+            
+            # Update file_url if it's external or empty
+            if ext_url and (created or not audio.file_url or str(audio.file_url).startswith('http')):
                 audio.file_url = ext_url
-                audio.save()
+                audio.save(update_fields=['file_url'])
+            
             post.audio = audio
         except Exception as e:
             print(f"Error linking audio to post from meta: {e}")

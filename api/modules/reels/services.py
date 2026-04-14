@@ -52,18 +52,17 @@ def create_reel(user, video_url: str, caption: str = '', visibility='all', menti
     if audio_id:
         try:
             from ...models import Audio
-            audio = Audio.objects.get(pk=audio_id)
-            reel.audio = audio
-            reel.save()
-            audio_id = audio.id
-        except (Audio.DoesNotExist, ValueError):
+            audio = Audio.objects.filter(pk=audio_id).first()
+            if audio:
+                reel.audio = audio
+                reel.save(update_fields=['audio'])
+                audio_id = audio.id
+        except Exception:
             # Safe fallthrough to audio_meta handling
             pass
     elif audio_meta and isinstance(audio_meta, dict):
         try:
             from ...models import Audio
-            from django.core.files.base import ContentFile
-            import requests
             
             # Simple metadata sync
             title = audio_meta.get('title', 'Original Audio')
@@ -71,17 +70,26 @@ def create_reel(user, video_url: str, caption: str = '', visibility='all', menti
             cover_url = audio_meta.get('coverArt', '')
             ext_url = audio_meta.get('url', '')
             
-            audio, created = Audio.objects.get_or_create(
-                title=title, artist=artist,
-                defaults={'created_by': user, 'cover_image_url': cover_url}
-            )
+            # Use filter().first() instead of get_or_create to satisfy uniqueness safely
+            audio = Audio.objects.filter(title=title, artist=artist).first()
+            created = False
             
-            if created and ext_url:
+            if not audio:
+                audio = Audio.objects.create(
+                    title=title, 
+                    artist=artist,
+                    created_by=user, 
+                    cover_image_url=cover_url
+                )
+                created = True
+            
+            # Update file_url if it's external or empty
+            if ext_url and (created or not audio.file_url or str(audio.file_url).startswith('http')):
                 audio.file_url = ext_url
-                audio.save()
+                audio.save(update_fields=['file_url'])
 
             reel.audio = audio
-            reel.save()
+            reel.save(update_fields=['audio'])
             audio_id = audio.id
         except Exception as e:
             print(f"Error creating audio from meta: {e}")
