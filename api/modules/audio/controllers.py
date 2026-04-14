@@ -37,9 +37,39 @@ class AudioViewSet(viewsets.ModelViewSet):
 
         return qs[:100]
 
-    @action(detail=True, methods=['post'])
-    def toggle_favorite(self, request, pk=None):
-        audio = self.get_object()
+    @action(detail=False, methods=['post'])
+    def toggle_favorite(self, request):
+        audio_id = request.data.get('audio_id')
+        external_id = request.data.get('external_id')
+        track_data = request.data.get('track_data', {})
+        
+        audio = None
+        # Try local ID first
+        if audio_id:
+            if isinstance(audio_id, int) or (isinstance(audio_id, str) and audio_id.isdigit()):
+                audio = Audio.objects.filter(id=audio_id).first()
+            else:
+                # It might be an external ID passed as audio_id
+                external_id = audio_id
+        
+        # Try external ID
+        if not audio and external_id:
+            audio = Audio.objects.filter(external_id=external_id).first()
+            # Auto-import if track data is provided
+            if not audio and track_data:
+                audio = Audio.objects.create(
+                    title=track_data.get('title', 'Unknown'),
+                    artist=track_data.get('artist', 'Unknown'),
+                    cover_image_url=track_data.get('cover_image_url', ''),
+                    file_url=track_data.get('file_url', ''),
+                    duration_ms=track_data.get('duration_ms', 0),
+                    external_id=external_id,
+                    created_by=request.user
+                )
+
+        if not audio:
+            return Response({'error': 'Audio track not found in library or provided metadata is missing.'}, status=404)
+        
         user = request.user
         fav, created = FavoriteAudio.objects.get_or_create(user=user, audio=audio)
         
