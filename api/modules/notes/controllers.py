@@ -137,6 +137,20 @@ def delete_note(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def get_user_note(request, user_id: int):
+    """Return the active note for a specific user (for viewing on their public profile)."""
+    try:
+        note = Note.objects.get(user_id=user_id)
+        if note.expires_at and note.expires_at < timezone.now():
+            note.delete()
+            return Response({'note': None})
+        return Response({'note': _note_data(note, request)})
+    except Note.DoesNotExist:
+        return Response({'note': None})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def list_friend_notes(request):
     """List notes from people the current user follows."""
     from django.contrib.auth.models import User
