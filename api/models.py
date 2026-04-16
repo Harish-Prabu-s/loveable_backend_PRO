@@ -57,6 +57,8 @@ class Post(models.Model):
     cover_image = models.ImageField(upload_to='posts/covers/', null=True, blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     is_archived = models.BooleanField(default=False)
+    editor_metadata_json = models.JSONField(default=dict, blank=True)
+    music_track = models.ForeignKey('MusicTrack', on_delete=models.SET_NULL, null=True, blank=True, related_name='post_usages')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -424,6 +426,8 @@ class StreakUpload(models.Model):
     audio_start_sec = models.IntegerField(default=0)
     hashtags = models.ManyToManyField(Hashtag, related_name='streak_uploads', blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
+    editor_metadata_json = models.JSONField(default=dict, blank=True)
+    music_track = models.ForeignKey('MusicTrack', on_delete=models.SET_NULL, null=True, blank=True, related_name='%(class)s_usages')
     created_at = models.DateTimeField(auto_now_add=True)
 
 class StreakComment(models.Model):
@@ -516,6 +520,8 @@ class Story(models.Model):
     audio_start_sec = models.IntegerField(default=0)
     hashtags = models.ManyToManyField(Hashtag, related_name='stories', blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
+    editor_metadata_json = models.JSONField(default=dict, blank=True)
+    music_track = models.ForeignKey('MusicTrack', on_delete=models.SET_NULL, null=True, blank=True, related_name='%(class)s_usages')
     created_at = models.DateTimeField(default=timezone.now)
     expires_at = models.DateTimeField(null=True, blank=True)
 
@@ -543,6 +549,8 @@ class Reel(models.Model):
     hashtags = models.ManyToManyField(Hashtag, related_name='reels', blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     is_archived = models.BooleanField(default=False)
+    editor_metadata_json = models.JSONField(default=dict, blank=True)
+    music_track = models.ForeignKey('MusicTrack', on_delete=models.SET_NULL, null=True, blank=True, related_name='%(class)s_usages')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -774,6 +782,8 @@ class Note(models.Model):
     expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    editor_metadata_json = models.JSONField(default=dict, blank=True)
+    music_track = models.ForeignKey('MusicTrack', on_delete=models.SET_NULL, null=True, blank=True, related_name='note_usages_legacy')
 
     def __str__(self):
         return f"Note by {self.user.username}: {self.text[:30]}"
@@ -799,3 +809,157 @@ class PostImage(models.Model):
 
     def __str__(self):
         return f"Image #{self.order} for Post #{self.post_id}"
+
+
+# ── Modern Scalable Media Editor Models ──────────────────────────────────────
+
+class MediaAsset(models.Model):
+    MEDIA_KIND_CHOICES = (
+        ('image', 'Image'),
+        ('video', 'Video'),
+        ('audio', 'Audio'),
+        ('thumbnail', 'Thumbnail'),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='media_assets')
+    file_type = models.CharField(max_length=50) # image/png, video/mp4 etc.
+    media_kind = models.CharField(max_length=20, choices=MEDIA_KIND_CHOICES)
+    original_url = models.FileField(upload_to='assets/original/')
+    processed_url = models.FileField(upload_to='assets/processed/', null=True, blank=True)
+    thumbnail_url = models.ImageField(upload_to='assets/thumbnails/', null=True, blank=True)
+    mime_type = models.CharField(max_length=100)
+    duration = models.FloatField(default=0)
+    file_size = models.BigIntegerField(default=0)
+    width = models.IntegerField(null=True, blank=True)
+    height = models.IntegerField(null=True, blank=True)
+    status = models.CharField(max_length=20, default='ready') # pending, processing, ready, failed
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+class MusicTrack(models.Model):
+    provider_name = models.CharField(max_length=50, default='jiosaavn')
+    provider_track_id = models.CharField(max_length=255, db_index=True)
+    title = models.CharField(max_length=255)
+    artist_name = models.CharField(max_length=255)
+    album_name = models.CharField(max_length=255, null=True, blank=True)
+    duration = models.IntegerField() # in seconds
+    audio_url = models.FileField(upload_to='music/full/', null=True, blank=True)
+    preview_url = models.URLField(max_length=1000, null=True, blank=True)
+    cover_image_url = models.URLField(max_length=1000, null=True, blank=True)
+    language = models.CharField(max_length=50, null=True, blank=True)
+    genre = models.CharField(max_length=50, null=True, blank=True)
+    is_trending = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    raw_provider_payload_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('provider_name', 'provider_track_id')
+
+class UserMusicFavorite(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    track = models.ForeignKey(MusicTrack, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'track')
+
+class EditorDraft(models.Model):
+    CONTENT_TYPE_CHOICES = (
+        ('post', 'Post'),
+        ('story', 'Story'),
+        ('streak', 'Streak'),
+        ('reel', 'Reel'),
+        ('note', 'Note'),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='editor_drafts')
+    content_type = models.CharField(max_length=20, choices=CONTENT_TYPE_CHOICES)
+    media_asset = models.ForeignKey(MediaAsset, on_delete=models.CASCADE, null=True, blank=True)
+    caption = models.TextField(blank=True)
+    note_text = models.CharField(max_length=60, blank=True)
+    editor_metadata_json = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=20, default='draft') # draft, archived
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+class MusicClipSelection(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    draft = models.OneToOneField(EditorDraft, on_delete=models.CASCADE, null=True, blank=True, related_name='music_selection')
+    # Track reference
+    provider_name = models.CharField(max_length=50, default='jiosaavn')
+    provider_track_id = models.CharField(max_length=255)
+    track = models.ForeignKey(MusicTrack, on_delete=models.CASCADE, null=True, blank=True)
+    # Clip details
+    clip_start_seconds = models.FloatField(default=0)
+    clip_end_seconds = models.FloatField(default=0)
+    clip_duration = models.FloatField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class OverlayItem(models.Model):
+    OVERLAY_TYPE_CHOICES = (
+        ('text', 'Text'),
+        ('emoji', 'Emoji'),
+        ('sticker', 'Sticker'),
+    )
+    draft = models.ForeignKey(EditorDraft, on_delete=models.CASCADE, related_name='overlays')
+    overlay_type = models.CharField(max_length=20, choices=OVERLAY_TYPE_CHOICES)
+    content = models.TextField() # text value or emoji character
+    pos_x = models.FloatField()
+    pos_y = models.FloatField()
+    scale_value = models.FloatField(default=1.0)
+    rotation_value = models.FloatField(default=0.0)
+    opacity = models.FloatField(default=1.0)
+    z_index = models.IntegerField(default=0)
+    start_time = models.FloatField(default=0) # for video
+    end_time = models.FloatField(null=True, blank=True) # for video
+    color_code = models.CharField(max_length=20, null=True, blank=True)
+    background_color = models.CharField(max_length=20, null=True, blank=True)
+    font_family = models.CharField(max_length=50, null=True, blank=True)
+    font_size = models.IntegerField(default=32)
+    animation_type = models.CharField(max_length=50, null=True, blank=True)
+    animation_config_json = models.JSONField(default=dict, blank=True)
+    extra_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+class FilterSelection(models.Model):
+    draft = models.OneToOneField(EditorDraft, on_delete=models.CASCADE, related_name='filter')
+    filter_name = models.CharField(max_length=50)
+    intensity = models.FloatField(default=1.0)
+    config_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+class PublishedContent(models.Model):
+    PUBLISH_STATUS_CHOICES = (
+        ('draft', 'Draft'),
+        ('processing', 'Processing'),
+        ('published', 'Published'),
+        ('failed', 'Failed'),
+        ('deleted', 'Deleted'),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='published_contents')
+    content_type = models.CharField(max_length=20) # post, story, streak, reel, note
+    media_asset = models.ForeignKey(MediaAsset, on_delete=models.SET_NULL, null=True, blank=True)
+    processed_media_url = models.URLField(max_length=1000, null=True, blank=True)
+    thumbnail_url = models.URLField(max_length=1000, null=True, blank=True)
+    caption = models.TextField(blank=True)
+    note_text = models.CharField(max_length=60, blank=True)
+    editor_metadata_json = models.JSONField(default=dict, blank=True)
+    publish_status = models.CharField(max_length=20, choices=PUBLISH_STATUS_CHOICES, default='published')
+    visibility = models.CharField(max_length=20, default='all')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+class PublishedMusicAttachment(models.Model):
+    content = models.OneToOneField(PublishedContent, on_delete=models.CASCADE, related_name='music')
+    provider_name = models.CharField(max_length=50, default='jiosaavn')
+    provider_track_id = models.CharField(max_length=255)
+    track = models.ForeignKey(MusicTrack, on_delete=models.SET_NULL, null=True, blank=True)
+    clip_start_seconds = models.FloatField(default=0)
+    clip_end_seconds = models.FloatField(default=0)
+    clip_duration = models.FloatField(default=0)
+    original_audio_volume = models.FloatField(default=1.0)
+    music_volume = models.FloatField(default=1.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+

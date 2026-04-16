@@ -43,14 +43,18 @@ import base64
 import re
 import uuid
 
-def create_post(user, caption: str, image=None, cover_image=None, visibility='all', mentions=None, additional_images=None, audio_id=None, audio_meta=None, audio_start_sec=0):
+def create_post(user, caption: str, image=None, cover_image=None, visibility='all', mentions=None, additional_images=None, audio_id=None, audio_meta=None, audio_start_sec=0, editor_metadata=None, provider_track_id=None, provider_name='jiosaavn'):
     """Create and return a new post, optionally saving an uploaded image file and processing mentions."""
     from ...models import PostImage, Audio
+    from ..audio.services import MusicService # Ensure this exists or use relative import
+    from api.services.music_service import MusicService
     
     post = Post(user=user, caption=caption, visibility=visibility)
     post.audio_start_sec = int(audio_start_sec or 0)
+    post.editor_metadata_json = editor_metadata or {}
     
     # Save primary image
+    # ... (existing code)
     if image:
         if isinstance(image, str):
             # Try parsing it as a base64 data URI
@@ -77,45 +81,48 @@ def create_post(user, caption: str, image=None, cover_image=None, visibility='al
         path = default_storage.save(filename, ContentFile(cover_image.read() if hasattr(cover_image, 'read') else cover_image))
         post.cover_image = path
     
-    # Handle Audio
-    if audio_id:
-        try:
-            # First try as integer ID
-            audio = Audio.objects.filter(pk=audio_id).first()
-            if audio:
-                post.audio = audio
-        except Exception:
-            # If not a valid ID format, ignore
-            pass
+    # Handle Modern Music Integration
+    if provider_track_id:
+        track = MusicService.get_track(provider_track_id, provider_name)
+        if track:
+            post.music_track = track
+            # Optional: sync legacy audio field for backward compatibility
+            post.audio_start_sec = int(audio_start_sec or 0)
 
-    if not post.audio and audio_meta and isinstance(audio_meta, dict):
-        try:
-            title = audio_meta.get('title', 'Original Audio')
-            artist = audio_meta.get('artist', 'Unknown')
-            cover_url = audio_meta.get('coverArt', '')
-            ext_url = audio_meta.get('url', '')
-            
-            # Use filter().first() instead of get_or_create to satisfy uniqueness safely
-            audio = Audio.objects.filter(title=title, artist=artist).first()
-            created = False
-            
-            if not audio:
-                audio = Audio.objects.create(
-                    title=title, 
-                    artist=artist,
-                    created_by=user, 
-                    cover_image_url=cover_url
-                )
-                created = True
-            
-            # Update file_url if it's external or empty
-            if ext_url and (created or not audio.file_url or str(audio.file_url).startswith('http')):
-                audio.file_url = ext_url
-                audio.save(update_fields=['file_url'])
-            
-            post.audio = audio
-        except Exception as e:
-            print(f"Error linking audio to post from meta: {e}")
+    # Handle Legacy Audio
+    if not post.music_track:
+        if audio_id:
+            try:
+                audio = Audio.objects.filter(pk=audio_id).first()
+                if audio:
+                    post.audio = audio
+            except Exception:
+                pass
+
+        if not post.audio and audio_meta and isinstance(audio_meta, dict):
+            try:
+                title = audio_meta.get('title', 'Original Audio')
+                artist = audio_meta.get('artist', 'Unknown')
+                cover_url = audio_meta.get('coverArt', '')
+                ext_url = audio_meta.get('url', '')
+                
+                audio = Audio.objects.filter(title=title, artist=artist).first()
+                created = False
+                
+                if not audio:
+                    audio = Audio.objects.create(
+                        title=title, artist=artist,
+                        created_by=user, cover_image_url=cover_url
+                    )
+                    created = True
+                
+                if ext_url and (created or not audio.file_url or str(audio.file_url).startswith('http')):
+                    audio.file_url = ext_url
+                    audio.save(update_fields=['file_url'])
+                
+                post.audio = audio
+            except Exception as e:
+                print(f"Error linking audio to post from meta: {e}")
 
     post.save()
     

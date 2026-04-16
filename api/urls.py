@@ -35,6 +35,8 @@ urlpatterns = [
     path('monetization/', include('api.modules.monetization.urls')),
     path('hashtags/', include('api.modules.hashtags.urls')),
     path('notes/', include('api.modules.notes.urls')),
+    path('modern/', include('api.modules.modern.urls')),
+
 
     # Legacy endpoints remain accessible if needed
     path('health/', views.health_check),

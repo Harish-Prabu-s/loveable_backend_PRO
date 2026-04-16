@@ -9,26 +9,46 @@ from ...models import Note, Audio
 
 def _note_data(note, request):
     from ...utils import get_absolute_media_url
-    audio_url = get_absolute_media_url(note.audio.file_url, request) if note.audio else None
+    
+    # Unified music metadata
+    music_data = None
+    if note.music_track:
+        music_data = {
+            'title': note.music_track.title,
+            'artist': note.music_track.artist_name,
+            'cover_art': note.music_track.cover_image_url,
+            'url': note.music_track.preview_url,
+            'provider': note.music_track.provider_name,
+            'provider_track_id': note.music_track.provider_track_id,
+            'duration': note.music_track.duration
+        }
+    elif note.audio:
+        music_data = {
+            'title': note.audio.title,
+            'artist': note.audio.artist,
+            'cover_art': get_absolute_media_url(note.audio.cover_image_url, request),
+            'url': get_absolute_media_url(note.audio.file_url, request),
+            'provider': 'legacy',
+            'duration': note.audio.duration_ms / 1000 if note.audio.duration_ms else 0
+        }
+
     avatar_url = None
     if hasattr(note.user, 'profile') and note.user.profile.photo:
         avatar_url = get_absolute_media_url(note.user.profile.photo, request)
+
     return {
         'id': note.id,
         'user_id': note.user_id,
         'display_name': getattr(note.user, 'profile', None) and note.user.profile.display_name or note.user.username,
         'avatar': avatar_url,
         'text': note.text,
-        'audio_id': note.audio_id,
-        'audio_title': note.audio.title if note.audio else None,
-        'audio_artist': note.audio.artist if note.audio else None,
-        'audio_url': audio_url,
+        'music': music_data,
         'audio_start_sec': note.audio_start_sec,
+        'editor_metadata': note.editor_metadata_json,
         'expires_at': note.expires_at.isoformat() if note.expires_at else None,
         'created_at': note.created_at.isoformat(),
         'likes_count': note.likes.count() if hasattr(note, 'likes') else 0,
         'is_liked': note.likes.filter(user=request.user).exists() if hasattr(note, 'likes') else False,
-        'mentions': list(note.mentions.values_list('id', flat=True)) if hasattr(note, 'mentions') else [],
     }
 
 
@@ -36,7 +56,9 @@ def _note_data(note, request):
 @permission_classes([IsAuthenticated])
 def get_my_note(request):
     try:
-        note = Note.objects.get(user=request.user)
+        note = Note.objects.filter(user=request.user).select_related('music_track', 'audio').first()
+        if not note:
+            return Response({'note': None})
         # Auto-expire check
         if note.expires_at and note.expires_at < timezone.now():
             note.delete()
@@ -49,51 +71,39 @@ def get_my_note(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def set_note(request):
-    """Create or update the current user's note."""
+    """Create or update the current user's note with modern music support."""
+    from api.services.music_service import MusicService
+    
     text = request.data.get('text', '').strip()
+    provider_track_id = request.data.get('provider_track_id')
+    provider_name = request.data.get('provider_name', 'jiosaavn')
     audio_id = request.data.get('audio_id')
-    audio_start_sec = int(request.data.get('audio_start_sec', 0))
+    audio_start_sec = float(request.data.get('audio_start_sec', 0))
     expires_hours = int(request.data.get('expires_hours', 24))
-
-    if not text and not audio_id:
-        return Response({'error': 'text or audio_id required'}, status=400)
+    editor_metadata = request.data.get('editor_metadata', {})
 
     expires_at = timezone.now() + timedelta(hours=expires_hours)
-    audio_meta = request.data.get('audio_meta')
-    audio = None
     
-    if audio_id:
+    music_track = None
+    if provider_track_id:
+        music_track = MusicService.get_track(provider_track_id, provider_name)
+
+    audio = None
+    if not music_track and audio_id:
         try:
             audio = Audio.objects.get(pk=audio_id)
-        except (Audio.DoesNotExist, ValueError):
-            # It's an external string ID, we need to create it from audio_meta
+        except:
             pass
-
-    if not audio and audio_meta and isinstance(audio_meta, dict):
-        try:
-            title = audio_meta.get('title', 'Original Audio')
-            artist = audio_meta.get('artist', 'Unknown')
-            cover_url = audio_meta.get('coverArt', '')
-            ext_url = audio_meta.get('url', '')
-            
-            audio, created = Audio.objects.get_or_create(
-                title=title, artist=artist,
-                defaults={'created_by': request.user, 'cover_image_url': cover_url}
-            )
-            
-            if created and ext_url:
-                audio.file_url = ext_url
-                audio.save()
-        except Exception as e:
-            print(f"Error creating audio for note from meta: {e}")
 
     note, _ = Note.objects.update_or_create(
         user=request.user,
         defaults={
             'text': text,
+            'music_track': music_track,
             'audio': audio,
             'audio_start_sec': audio_start_sec,
             'expires_at': expires_at,
+            'editor_metadata_json': editor_metadata
         }
     )
     

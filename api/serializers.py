@@ -7,7 +7,8 @@ from .models import (
     Game, LevelProgress, Offer, LeagueTier, CallSession,
     Badge, DailyReward, Room, Message, Story, Gift, GiftTransaction, StoryView, Follow, Reel, Streak, Post, PostLike,
     CloseFriend, PostView, ReelView, StreakView, StreakUpload, MessageReaction, Note,
-    Highlight, HighlightStory, Collection, SavedItem, FavoriteAudio, Hashtag
+    Highlight, HighlightStory, Collection, SavedItem, FavoriteAudio, Hashtag, EditorDraft, FilterSelection, OverlayItem,
+    MusicClipSelection, MusicTrack, MediaAsset, PublishedContent, PublishedMusicAttachment
 )
 from .utils import get_absolute_media_url
 from .models import Audio
@@ -273,17 +274,39 @@ class StorySerializer(serializers.ModelSerializer):
     media_url = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
-    is_liked = serializers.SerializerMethodField()
-    is_owner = serializers.SerializerMethodField()
-    mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
-    audio_details = AudioSerializer(source='audio', read_only=True)
+    music = serializers.SerializerMethodField()
+    editor_metadata = serializers.JSONField(source='editor_metadata_json', read_only=True)
 
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
     parent_user = SimpleUserSerializer(source='reposted_from.user', read_only=True)
 
     class Meta:
         model = Story
-        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_username', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details', 'audio_start_sec']
+        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_username', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user', 'music', 'editor_metadata']
+
+    def get_music(self, obj):
+        request = self.context.get('request')
+        if obj.music_track:
+            return {
+                'title': obj.music_track.title,
+                'artist': obj.music_track.artist_name,
+                'cover_art': obj.music_track.cover_image_url,
+                'url': obj.music_track.preview_url,
+                'provider': obj.music_track.provider_name,
+                'provider_track_id': obj.music_track.provider_track_id,
+                'duration': obj.music_track.duration,
+                'start_sec': obj.audio_start_sec
+            }
+        elif obj.audio:
+            return {
+                'title': obj.audio.title,
+                'artist': obj.audio.artist,
+                'cover_art': get_absolute_media_url(obj.audio.cover_image_url, request),
+                'url': get_absolute_media_url(obj.audio.file_url, request),
+                'provider': 'legacy',
+                'start_sec': obj.audio_start_sec
+            }
+        return None
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -417,7 +440,9 @@ class ReelSerializer(serializers.ModelSerializer):
     is_following = serializers.SerializerMethodField()
     is_saved = serializers.SerializerMethodField()
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
-    audio_details = AudioSerializer(source='audio', read_only=True)
+    
+    music = serializers.SerializerMethodField()
+    editor_metadata = serializers.JSONField(source='editor_metadata_json', read_only=True)
 
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
     parent_user = SimpleUserSerializer(source='reposted_from.user', read_only=True)
@@ -426,7 +451,31 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'thumbnail', 'cover_image', 'caption', 'hashtags', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details', 'audio_start_sec']
+        fields = ['id', 'user', 'video_url', 'thumbnail', 'cover_image', 'caption', 'hashtags', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'music', 'editor_metadata']
+
+    def get_music(self, obj):
+        request = self.context.get('request')
+        if obj.music_track:
+            return {
+                'title': obj.music_track.title,
+                'artist': obj.music_track.artist_name,
+                'cover_art': obj.music_track.cover_image_url,
+                'url': obj.music_track.preview_url,
+                'provider': obj.music_track.provider_name,
+                'provider_track_id': obj.music_track.provider_track_id,
+                'duration': obj.music_track.duration,
+                'start_sec': obj.audio_start_sec
+            }
+        elif obj.audio:
+            return {
+                'title': obj.audio.title,
+                'artist': obj.audio.artist,
+                'cover_art': get_absolute_media_url(obj.audio.cover_image_url, request),
+                'url': get_absolute_media_url(obj.audio.file_url, request),
+                'provider': 'legacy',
+                'start_sec': obj.audio_start_sec
+            }
+        return None
 
     def get_is_saved(self, obj):
         request = self.context.get('request')
@@ -569,12 +618,8 @@ class PostSerializer(serializers.ModelSerializer):
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
     view_count = serializers.IntegerField(source='views.count', read_only=True)
-    is_liked = serializers.SerializerMethodField()
-    is_owner = serializers.SerializerMethodField()
-    is_saved = serializers.SerializerMethodField()
-    aspect_ratio = serializers.SerializerMethodField()
-    images = serializers.SerializerMethodField()
-    audio_details = AudioSerializer(source='audio', read_only=True)
+    music = serializers.SerializerMethodField()
+    editor_metadata = serializers.JSONField(source='editor_metadata_json', read_only=True)
 
     hashtags = HashtagSerializer(many=True, read_only=True)
 
@@ -583,8 +628,32 @@ class PostSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'profile_id', 'display_name', 'username', 'photo', 'gender',
             'caption', 'hashtags', 'image', 'cover_image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_saved',
-            'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio', 'audio_details', 'audio_start_sec'
+            'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio', 'music', 'editor_metadata'
         ]
+
+    def get_music(self, obj):
+        request = self.context.get('request')
+        if obj.music_track:
+            return {
+                'title': obj.music_track.title,
+                'artist': obj.music_track.artist_name,
+                'cover_art': obj.music_track.cover_image_url,
+                'url': obj.music_track.preview_url,
+                'provider': obj.music_track.provider_name,
+                'provider_track_id': obj.music_track.provider_track_id,
+                'duration': obj.music_track.duration,
+                'start_sec': obj.audio_start_sec
+            }
+        elif obj.audio:
+            return {
+                'title': obj.audio.title,
+                'artist': obj.audio.artist,
+                'cover_art': get_absolute_media_url(obj.audio.cover_image_url, request),
+                'url': get_absolute_media_url(obj.audio.file_url, request),
+                'provider': 'legacy',
+                'start_sec': obj.audio_start_sec
+            }
+        return None
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
     parent_user = SimpleUserSerializer(source='reposted_from.user', read_only=True)
@@ -789,3 +858,56 @@ class ProfileSerializer(serializers.ModelSerializer):
             except Exception:
                 return None
         return None
+
+# ── Modern Scalable Media Editor Serializers ─────────────────────────────────
+
+class MediaAssetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MediaAsset
+        fields = '__all__'
+
+class MusicTrackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MusicTrack
+        fields = '__all__'
+
+class MusicClipSelectionSerializer(serializers.ModelSerializer):
+    track_details = MusicTrackSerializer(source='track', read_only=True)
+    class Meta:
+        model = MusicClipSelection
+        fields = '__all__'
+
+class OverlayItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OverlayItem
+        fields = '__all__'
+
+class FilterSelectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FilterSelection
+        fields = '__all__'
+
+class EditorDraftSerializer(serializers.ModelSerializer):
+    overlays = OverlayItemSerializer(many=True, read_only=True)
+    filter = FilterSelectionSerializer(read_only=True)
+    music_selection = MusicClipSelectionSerializer(read_only=True)
+    media_asset_details = MediaAssetSerializer(source='media_asset', read_only=True)
+
+    class Meta:
+        model = EditorDraft
+        fields = '__all__'
+
+class PublishedMusicAttachmentSerializer(serializers.ModelSerializer):
+    track_details = MusicTrackSerializer(source='track', read_only=True)
+    class Meta:
+        model = PublishedMusicAttachment
+        fields = '__all__'
+
+class PublishedContentSerializer(serializers.ModelSerializer):
+    music = PublishedMusicAttachmentSerializer(read_only=True)
+    media_asset_details = MediaAssetSerializer(source='media_asset', read_only=True)
+    user_details = ProfileSerializer(source='user.profile', read_only=True)
+
+    class Meta:
+        model = PublishedContent
+        fields = '__all__'

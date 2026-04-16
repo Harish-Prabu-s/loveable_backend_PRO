@@ -140,11 +140,22 @@ def create_post_view(request):
             except:
                 pass
 
+        editor_metadata = request.data.get('editor_metadata')
+        if isinstance(editor_metadata, str):
+            try:
+                import json
+                editor_metadata = json.loads(editor_metadata)
+            except:
+                pass
+
         post = create_post(
             request.user, caption, image, 
             cover_image=cover_image, visibility=visibility, 
             mentions=mentions, additional_images=additional_images,
-            audio_id=audio_id, audio_meta=audio_meta, audio_start_sec=audio_start_sec
+            audio_id=audio_id, audio_meta=audio_meta, audio_start_sec=audio_start_sec,
+            editor_metadata=editor_metadata,
+            provider_track_id=request.data.get('provider_track_id'),
+            provider_name=request.data.get('provider_name', 'jiosaavn')
         )
         
         # Handle explicit hashtags if provided, otherwise parse from caption

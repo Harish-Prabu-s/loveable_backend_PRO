@@ -108,8 +108,23 @@ def create_reel_view(request):
     if not cover_image:
         return Response({'error': 'Cover image is mandatory'}, status=400)
             
+    editor_metadata = request.data.get('editor_metadata')
+    if isinstance(editor_metadata, str):
+        try:
+            import json
+            editor_metadata = json.loads(editor_metadata)
+        except:
+            pass
+
     relative_video_path = strip_base_url(video_url) if video_url else ''
-    reel = create_reel(request.user, relative_video_path, caption, visibility, mentions=mentions, audio_id=audio_id, audio_meta=audio_meta, audio_start_sec=audio_start_sec, cover_image=cover_image)
+    reel = create_reel(
+        request.user, relative_video_path, caption, visibility, 
+        mentions=mentions, audio_id=audio_id, audio_meta=audio_meta, 
+        audio_start_sec=audio_start_sec, cover_image=cover_image,
+        editor_metadata=editor_metadata,
+        provider_track_id=request.data.get('provider_track_id'),
+        provider_name=request.data.get('provider_name', 'jiosaavn')
+    )
     
     # Handle explicit hashtags if provided, otherwise parse from caption
     hashtags = request.data.get('hashtags', [])
