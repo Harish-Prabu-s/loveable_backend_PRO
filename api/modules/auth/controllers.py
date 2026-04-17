@@ -557,7 +557,7 @@ def diag_sms_view(request):
     env_path = os.path.join(settings.BASE_DIR, '.env')
     env_exists = os.path.exists(env_path)
     
-    # 3. Scan .env file for KEYS (Security safe: only show key names)
+    # 3. Scan .env file for KEYS
     keys_found = []
     if env_exists:
         try:
@@ -569,9 +569,12 @@ def diag_sms_view(request):
         except Exception as e:
             keys_found.append(f"ERROR_READING_FILE: {e}")
 
-    test_result = None
+    # 4. Perform Dual Route Test
+    test_results = {}
     if settings_key or os_key:
-        test_result = send_fast2sms_otp_get('7904067891', '000000')
+        from .utils_fast2sms import send_fast2sms_otp, send_fast2sms_otp_get
+        test_results['route_q_post'] = send_fast2sms_otp('7904067891', '111111')
+        test_results['route_otp_get'] = send_fast2sms_otp_get('7904067891', '222222')
     
     return Response({
         'django_settings_configured': bool(settings_key),
@@ -579,7 +582,7 @@ def diag_sms_view(request):
         'env_file_detected': env_exists,
         'keys_found_in_env_file': keys_found,
         'base_dir': str(settings.BASE_DIR),
-        'test_result': test_result,
+        'test_results': test_results,
         'debug_info': {
             'settings_preview': f"{settings_key[:4]}..." if settings_key else "NONE",
             'os_preview': f"{os_key[:4]}..." if os_key else "NONE",

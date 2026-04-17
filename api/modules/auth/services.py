@@ -331,14 +331,16 @@ def generate_and_store_otp(phone: str, channel: str = 'sms', trace: list = None)
     # 2. Try Fast2SMS First
     if channel == 'sms' and fast2sms_key:
         try:
-            from .utils_fast2sms import send_fast2sms_otp_get
-            _trace(f"Attempting Fast2SMS (OTP Route) for {phone}")
-            result = send_fast2sms_otp_get(phone, code)
+            from .utils_fast2sms import send_fast2sms_otp
+            _trace(f"Attempting Fast2SMS (Quick Route 'q') for {phone}")
+            result = send_fast2sms_otp(phone, code)
             _trace(f"Fast2SMS Result: {result}")
             
             if result.get('success'):
+                # Store the code we just sent
                 OTP.objects.create(
-                    phone_number=phone, code=code,
+                    phone_number=phone,
+                    code=code,
                     created_at=timezone.now(),
                     expires_at=timezone.now() + timedelta(minutes=10),
                     is_used=False
