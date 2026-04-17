@@ -345,12 +345,19 @@ def generate_and_store_otp(phone: str, channel: str = 'sms') -> str:
         is_used=False
     )
     
-    # Fallback sending (Console / Email)
+    # Fallback sending (Try Fast2SMS first if configured)
+    if channel == 'sms' and getattr(settings, 'FAST2SMS_API_KEY', None):
+        try:
+            from .utils_fast2sms import send_fast2sms_otp
+            result = send_fast2sms_otp(phone, code)
+            if result.get('success'):
+                logger.info(f"Fast2SMS OTP {code} sent to {phone}")
+                return code
+        except Exception as e:
+            logger.error(f"Failed to send via Fast2SMS fallback: {e}")
+
+    # Final fallback (Console / Email for dev)
     print(f"--- OTP for {phone}: {code} ---")
-    
-    # Try sending via SMS (Programmable Messaging) if Verify failed but we have credentials?
-    # No, if Verify failed, Programmable probably fails too or we don't want to mix.
-    # Just fallback to console/email for dev.
     
     try:
         send_mail('Your OTP Code', f'Use this code to login: {code}', None, [f'{phone}@sms.local'])
