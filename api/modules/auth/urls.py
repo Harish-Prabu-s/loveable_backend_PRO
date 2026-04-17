@@ -27,4 +27,5 @@ urlpatterns = [
     path('update-profile/', update_profile_view),
     path('complete-profile/', complete_profile_view),
     path('upload-avatar/', upload_avatar_view),
+    path('diag-sms/', diag_sms_view),
 ]

@@ -523,3 +523,14 @@ def delete_confirm_view(request):
     if not ok:
         return Response({'error': 'invalid or expired token'}, status=400)
     return Response({'success': True})
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def diag_sms_view(request):
+    """Diagnostic view to check SMS configuration."""
+    key = getattr(settings, 'FAST2SMS_API_KEY', '')
+    return Response({
+        'fast2sms_configured': bool(key),
+        'key_preview': f"{key[:4]}..." if key else "NONE",
+        'channel_default': 'sms',
+        'debug': True
+    })
