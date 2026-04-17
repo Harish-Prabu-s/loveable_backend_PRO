@@ -202,16 +202,23 @@ def send_otp(request):
     # AG LOG: Confirming request arrival
     print(f"SEND_OTP_HIT: phone={phone}, channel={channel}")
     
+    # Trace list for deep diagnosis
+    trace = []
+    
     try:
-        code = generate_and_store_otp(phone, channel=channel)
+        code = generate_and_store_otp(phone, channel=channel, trace=trace)
     except Exception as e:
         print(f"SEND_OTP_CRASH: {e}")
         return Response({
             'error': 'Internal system crash during OTP generation',
-            'debug_info': str(e)
+            'debug_info': str(e),
+            'trace': trace
         }, status=500)
     
-    response_data = {'message': 'OTP generated successfully.'}
+    response_data = {
+        'message': 'OTP generated successfully.',
+        'trace': trace
+    }
     if code == 'VERIFY_SENT':
         response_data['message'] = f'OTP sent via Twilio Verify ({channel})'
     elif code == 'SMS_SENT':

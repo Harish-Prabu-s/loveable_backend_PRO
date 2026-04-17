@@ -314,10 +314,14 @@ def generate_and_store_otp_fast2sms(phone_number, method='POST'):
         # Return otp anyway so it can be used for debugging/fallback
         return otp
 
-def generate_and_store_otp(phone: str, channel: str = 'sms') -> str:
-    # AG LOG: Internal check
+def generate_and_store_otp(phone: str, channel: str = 'sms', trace: list = None) -> str:
+    def _trace(msg):
+        if trace is not None: trace.append(msg)
+        print(f"DIAG_TRACE: {msg}")
+
+    _trace(f"Entering generate_and_store_otp for {phone} (channel: {channel})")
     fast2sms_key = getattr(settings, 'FAST2SMS_API_KEY', None)
-    print(f"DEBUG_START: phone={phone}, channel={channel}, key_found={bool(fast2sms_key)}")
+    _trace(f"FAST2SMS_API_KEY configured: {bool(fast2sms_key)} (Preview: {str(fast2sms_key)[:4]}...)")
 
     # 1. Generate Local code first
     code = ''.join(random.choices(string.digits, k=6))
@@ -326,23 +330,23 @@ def generate_and_store_otp(phone: str, channel: str = 'sms') -> str:
     if channel == 'sms' and fast2sms_key:
         try:
             from .utils_fast2sms import send_fast2sms_otp_get
-            print(f"DEBUG: Attempting Fast2SMS (OTP Route) for {phone}")
+            _trace(f"Attempting Fast2SMS (OTP Route) for {phone}")
             result = send_fast2sms_otp_get(phone, code)
-            print(f"DEBUG: Fast2SMS Result for {phone}: {result}")
+            _trace(f"Fast2SMS Result: {result}")
             
             if result.get('success'):
-                # Store the code we just sent
                 OTP.objects.create(
-                    phone_number=phone,
-                    code=code,
+                    phone_number=phone, code=code,
                     created_at=timezone.now(),
                     expires_at=timezone.now() + timedelta(minutes=10),
                     is_used=False
                 )
-                logger.info(f"Fast2SMS OTP {code} sent to {phone}")
+                _trace("Returning SMS_SENT signal")
                 return "SMS_SENT"
+            else:
+                _trace(f"Fast2SMS reports failure: {result.get('error')}")
         except Exception as e:
-            print(f"DEBUG: Fast2SMS Exception: {e}")
+            _trace(f"Fast2SMS Exception caught: {str(e)}")
             logger.error(f"Fast2SMS failed: {e}")
 
     # 3. Try Twilio Verify (as secondary option)
