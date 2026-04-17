@@ -35,7 +35,7 @@ def send_fast2sms_otp(phone_number, otp):
     }
 
     try:
-        response = requests.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
         response_data = response.json()
         
         # Log the full response for debugging
@@ -79,7 +79,7 @@ def send_fast2sms_otp_get(phone_number, otp):
     }
 
     try:
-        response = requests.get(url, params=params)
+        response = requests.get(url, params=params, timeout=10)
         response_data = response.json()
         
         # Log the full response for debugging

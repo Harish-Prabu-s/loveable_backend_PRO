@@ -10,7 +10,8 @@ def test_remote_otp():
     print(f"Data: {data}")
     
     try:
-        response = requests.post(url, json=data, headers=headers, timeout=10)
+        # Increased timeout to 30s
+        response = requests.post(url, json=data, headers=headers, timeout=30)
         print(f"Status Code: {response.status_code}")
         print(f"Response JSON: {json.dumps(response.json(), indent=2)}")
     except Exception as e:
