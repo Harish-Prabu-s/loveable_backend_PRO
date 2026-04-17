@@ -545,32 +545,39 @@ def delete_confirm_view(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def diag_sms_view(request):
-    """Deep diagnostic view to check environment state."""
+    """Extreme diagnostic view to check environment state and .env file."""
     import os
     from .utils_fast2sms import send_fast2sms_otp_get
     
-    # 1. Check Django Settings
+    # 1. Check Django Settings and OS
     settings_key = getattr(settings, 'FAST2SMS_API_KEY', '')
-    
-    # 2. Check OS Environ directly (might be set but not in settings)
     os_key = os.environ.get('FAST2SMS_API_KEY', '')
     
-    # 3. Check for .env file presence on remote
-    env_exists = os.path.exists(os.path.join(settings.BASE_DIR, '.env'))
+    # 2. Check for .env file presence
+    env_path = os.path.join(settings.BASE_DIR, '.env')
+    env_exists = os.path.exists(env_path)
     
+    # 3. Scan .env file for KEYS (Security safe: only show key names)
+    keys_found = []
+    if env_exists:
+        try:
+            with open(env_path, 'r') as f:
+                for line in f:
+                    if '=' in line and not line.startswith('#'):
+                        key_name = line.split('=')[0].strip()
+                        keys_found.append(key_name)
+        except Exception as e:
+            keys_found.append(f"ERROR_READING_FILE: {e}")
+
     test_result = None
     if settings_key or os_key:
-        final_key = settings_key or os_key
-        # Temporary override if found in os but not settings
-        if not settings_key and os_key:
-            settings.FAST2SMS_API_KEY = os_key
-        
         test_result = send_fast2sms_otp_get('7904067891', '000000')
     
     return Response({
         'django_settings_configured': bool(settings_key),
         'os_environ_configured': bool(os_key),
         'env_file_detected': env_exists,
+        'keys_found_in_env_file': keys_found,
         'base_dir': str(settings.BASE_DIR),
         'test_result': test_result,
         'debug_info': {
