@@ -199,7 +199,17 @@ def send_otp(request):
     if channel not in ['sms', 'whatsapp']:
         channel = 'sms'
         
-    code = generate_and_store_otp(phone, channel=channel)
+    # AG LOG: Confirming request arrival
+    print(f"SEND_OTP_HIT: phone={phone}, channel={channel}")
+    
+    try:
+        code = generate_and_store_otp(phone, channel=channel)
+    except Exception as e:
+        print(f"SEND_OTP_CRASH: {e}")
+        return Response({
+            'error': 'Internal system crash during OTP generation',
+            'debug_info': str(e)
+        }, status=500)
     
     response_data = {'message': 'OTP generated successfully.'}
     if code == 'VERIFY_SENT':
@@ -210,6 +220,8 @@ def send_otp(request):
         # Only return OTP if it was generated locally (Mock/Dev) or if sending failed
         response_data['otp'] = code
         response_data['message'] = 'OTP generated (Mock/Dev mode or Send failed)'
+        # Add hint why it failed if possible
+        response_data['debug_channel'] = channel
         
     return Response(response_data)
 

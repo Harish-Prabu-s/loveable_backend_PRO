@@ -315,13 +315,14 @@ def generate_and_store_otp_fast2sms(phone_number, method='POST'):
         return otp
 
 def generate_and_store_otp(phone: str, channel: str = 'sms') -> str:
-    print(f"DEBUG: Entering generate_and_store_otp for {phone} (channel: {channel})")
-    
+    # AG LOG: Internal check
+    fast2sms_key = getattr(settings, 'FAST2SMS_API_KEY', None)
+    print(f"DEBUG_START: phone={phone}, channel={channel}, key_found={bool(fast2sms_key)}")
+
     # 1. Generate Local code first
     code = ''.join(random.choices(string.digits, k=6))
     
     # 2. Try Fast2SMS First
-    fast2sms_key = getattr(settings, 'FAST2SMS_API_KEY', None)
     if channel == 'sms' and fast2sms_key:
         try:
             from .utils_fast2sms import send_fast2sms_otp_get
