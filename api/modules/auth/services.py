@@ -349,15 +349,21 @@ def generate_and_store_otp(phone: str, channel: str = 'sms') -> str:
     if channel == 'sms' and getattr(settings, 'FAST2SMS_API_KEY', None):
         try:
             from .utils_fast2sms import send_fast2sms_otp
+            # Simplify the message for better deliverability
+            msg = f"Your Vibely code is {code}"
+            
+            # Temporary manual call to ensure we capture the full result
             result = send_fast2sms_otp(phone, code)
+            print(f"DEBUG: Fast2SMS for {phone} result: {result}")
+            
             if result.get('success'):
                 logger.info(f"Fast2SMS OTP {code} sent to {phone}")
-                return code
+                return "SMS_SENT" # Signal that it was sent successfully
         except Exception as e:
             logger.error(f"Failed to send via Fast2SMS fallback: {e}")
 
     # Final fallback (Console / Email for dev)
-    print(f"--- OTP for {phone}: {code} ---")
+    print(f"--- OTP FALLBACK for {phone}: {code} ---")
     
     try:
         send_mail('Your OTP Code', f'Use this code to login: {code}', None, [f'{phone}@sms.local'])

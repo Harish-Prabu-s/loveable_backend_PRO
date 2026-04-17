@@ -202,11 +202,14 @@ def send_otp(request):
     code = generate_and_store_otp(phone, channel=channel)
     
     response_data = {'message': 'OTP generated successfully.'}
-    if code != 'VERIFY_SENT':
-        # Only return OTP if it was generated locally (Mock/Dev)
-        response_data['otp'] = code
-    else:
+    if code == 'VERIFY_SENT':
         response_data['message'] = f'OTP sent via Twilio Verify ({channel})'
+    elif code == 'SMS_SENT':
+        response_data['message'] = f'OTP sent successfully via SMS'
+    else:
+        # Only return OTP if it was generated locally (Mock/Dev) or if sending failed
+        response_data['otp'] = code
+        response_data['message'] = 'OTP generated (Mock/Dev mode or Send failed)'
         
     return Response(response_data)
 
