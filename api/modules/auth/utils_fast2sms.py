@@ -28,8 +28,8 @@ def send_fast2sms_otp(phone_number, otp):
     }
     
     payload = {
-        "route": "otp",
-        "variables_values": str(otp),
+        "route": "q",
+        "message": f"Your Vibely login OTP is: {otp}. Valid for 10 minutes.",
         "numbers": clean_number,
         "flash": "0"
     }

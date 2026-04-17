@@ -289,7 +289,7 @@ def generate_and_store_otp_fast2sms(phone_number, method='POST'):
     'method' can be 'POST' or 'GET'.
     """
     # User requested random OTP for variables_values (OTP)
-    otp = ''.join(random.choices(string.digits, k=4))
+    otp = ''.join(random.choices(string.digits, k=6))
     
     # Store in database
     OTP.objects.create(
