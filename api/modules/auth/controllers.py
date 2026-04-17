@@ -569,12 +569,16 @@ def diag_sms_view(request):
         except Exception as e:
             keys_found.append(f"ERROR_READING_FILE: {e}")
 
-    # 4. Perform Dual Route Test
+    # 4. Perform Dual Route Test (ONLY if a phone is provided in URL)
     test_results = {}
-    if settings_key or os_key:
+    test_phone = request.query_params.get('test_phone')
+    
+    if test_phone and (settings_key or os_key):
         from .utils_fast2sms import send_fast2sms_otp, send_fast2sms_otp_get
-        test_results['route_q_post'] = send_fast2sms_otp('7904067891', '111111')
-        test_results['route_otp_get'] = send_fast2sms_otp_get('7904067891', '222222')
+        test_results['route_q_post'] = send_fast2sms_otp(test_phone, '111111')
+        test_results['route_otp_get'] = send_fast2sms_otp_get(test_phone, '222222')
+    elif not test_phone:
+        test_results['info'] = "Provide ?test_phone=... in URL to perform live SMS test"
     
     return Response({
         'django_settings_configured': bool(settings_key),

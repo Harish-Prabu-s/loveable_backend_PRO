@@ -2,8 +2,10 @@ import requests
 import json
 
 def test_remote_otp():
+    # SET YOUR PHONE NUMBER HERE
+    my_phone = "YOUR_PHONE_NUMBER" 
     url = "https://loveable.sbs/api/auth/send-otp/"
-    data = {"phone_number": "7904067891", "channel": "sms"}
+    data = {"phone_number": my_phone, "channel": "sms"}
     headers = {"Content-Type": "application/json"}
     
     print(f"Hitting Remote URL: {url}")
