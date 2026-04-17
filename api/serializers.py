@@ -274,7 +274,7 @@ class StorySerializer(serializers.ModelSerializer):
     media_url = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
-    music = serializers.SerializerMethodField()
+    audio_details = serializers.SerializerMethodField()
     editor_metadata = serializers.JSONField(source='editor_metadata_json', read_only=True)
 
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -285,29 +285,36 @@ class StorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Story
-        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_username', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user', 'music', 'editor_metadata']
+        fields = ['id', 'user', 'media_url', 'media_type', 'caption', 'created_at', 'expires_at', 'user_display_name', 'user_username', 'user_avatar', 'view_count', 'likes_count', 'comments_count', 'is_liked', 'is_owner', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details', 'editor_metadata']
 
-    def get_music(self, obj):
+    def get_audio_details(self, obj):
         request = self.context.get('request')
+        user = request.user if request and request.user.is_authenticated else None
         if obj.music_track:
             return {
+                'id': obj.music_track.id,
                 'title': obj.music_track.title,
                 'artist': obj.music_track.artist_name,
                 'cover_art': obj.music_track.cover_image_url,
                 'url': obj.music_track.preview_url,
+                'file_url': obj.music_track.preview_url,
                 'provider': obj.music_track.provider_name,
                 'provider_track_id': obj.music_track.provider_track_id,
                 'duration': obj.music_track.duration,
-                'start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.music_track.id).exists() if user and obj.music_track else False
             }
         elif obj.audio:
             return {
+                'id': obj.audio.id,
                 'title': obj.audio.title,
                 'artist': obj.audio.artist,
                 'cover_art': get_absolute_media_url(obj.audio.cover_image_url, request),
+                'file_url': get_absolute_media_url(obj.audio.file_url, request),
                 'url': get_absolute_media_url(obj.audio.file_url, request),
                 'provider': 'legacy',
-                'start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.music_track.id).exists() if user and obj.music_track else False
             }
         return None
 
@@ -444,7 +451,7 @@ class ReelSerializer(serializers.ModelSerializer):
     is_saved = serializers.SerializerMethodField()
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
     
-    music = serializers.SerializerMethodField()
+    audio_details = serializers.SerializerMethodField()
     editor_metadata = serializers.JSONField(source='editor_metadata_json', read_only=True)
 
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -454,29 +461,36 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'video_url', 'thumbnail', 'cover_image', 'caption', 'hashtags', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'music', 'editor_metadata']
+        fields = ['id', 'user', 'video_url', 'thumbnail', 'cover_image', 'caption', 'hashtags', 'created_at', 'user_display_name', 'user_username', 'user_avatar', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_following', 'is_saved', 'mentioned_users', 'reposted_from', 'parent_user', 'audio_details', 'editor_metadata']
 
-    def get_music(self, obj):
+    def get_audio_details(self, obj):
         request = self.context.get('request')
+        user = request.user if request and request.user.is_authenticated else None
         if obj.music_track:
             return {
+                'id': obj.music_track.id,
                 'title': obj.music_track.title,
                 'artist': obj.music_track.artist_name,
                 'cover_art': obj.music_track.cover_image_url,
                 'url': obj.music_track.preview_url,
+                'file_url': obj.music_track.preview_url,
                 'provider': obj.music_track.provider_name,
                 'provider_track_id': obj.music_track.provider_track_id,
                 'duration': obj.music_track.duration,
-                'start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.music_track.id).exists() if user and obj.music_track else False
             }
         elif obj.audio:
             return {
+                'id': obj.audio.id,
                 'title': obj.audio.title,
                 'artist': obj.audio.artist,
                 'cover_art': get_absolute_media_url(obj.audio.cover_image_url, request),
+                'file_url': get_absolute_media_url(obj.audio.file_url, request),
                 'url': get_absolute_media_url(obj.audio.file_url, request),
                 'provider': 'legacy',
-                'start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.music_track.id).exists() if user and obj.music_track else False
             }
         return None
 
@@ -621,7 +635,7 @@ class PostSerializer(serializers.ModelSerializer):
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
     view_count = serializers.IntegerField(source='views.count', read_only=True)
-    music = serializers.SerializerMethodField()
+    audio_details = serializers.SerializerMethodField()
     editor_metadata = serializers.JSONField(source='editor_metadata_json', read_only=True)
 
     hashtags = HashtagSerializer(many=True, read_only=True)
@@ -636,30 +650,37 @@ class PostSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'profile_id', 'display_name', 'username', 'photo', 'gender',
             'caption', 'hashtags', 'image', 'cover_image', 'images', 'likes_count', 'comments_count', 'view_count', 'is_liked', 'is_owner', 'is_saved',
-            'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio', 'music', 'editor_metadata'
+            'created_at', 'mentioned_users', 'reposted_from', 'parent_user', 'aspect_ratio', 'audio_details', 'editor_metadata'
         ]
 
-    def get_music(self, obj):
+    def get_audio_details(self, obj):
         request = self.context.get('request')
+        user = request.user if request and request.user.is_authenticated else None
         if obj.music_track:
             return {
+                'id': obj.music_track.id,
                 'title': obj.music_track.title,
                 'artist': obj.music_track.artist_name,
                 'cover_art': obj.music_track.cover_image_url,
                 'url': obj.music_track.preview_url,
+                'file_url': obj.music_track.preview_url,
                 'provider': obj.music_track.provider_name,
                 'provider_track_id': obj.music_track.provider_track_id,
                 'duration': obj.music_track.duration,
-                'start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.music_track.id).exists() if user and obj.music_track else False
             }
         elif obj.audio:
             return {
+                'id': obj.audio.id,
                 'title': obj.audio.title,
                 'artist': obj.audio.artist,
                 'cover_art': get_absolute_media_url(obj.audio.cover_image_url, request),
+                'file_url': get_absolute_media_url(obj.audio.file_url, request),
                 'url': get_absolute_media_url(obj.audio.file_url, request),
                 'provider': 'legacy',
-                'start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.music_track.id).exists() if user and obj.music_track else False
             }
         return None
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)

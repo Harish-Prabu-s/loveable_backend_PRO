@@ -53,7 +53,7 @@ class CollectionViewSet(viewsets.ModelViewSet):
         saved_item = SavedItem.objects.filter(**filter_kwargs).first()
         if saved_item:
             saved_item.delete()
-            return Response({'status': 'unpaved', 'is_saved': False})
+            return Response({'status': 'unsaved', 'is_saved': False})
         
         SavedItem.objects.create(**filter_kwargs)
         return Response({'status': 'saved', 'is_saved': True})
