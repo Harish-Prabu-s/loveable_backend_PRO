@@ -279,6 +279,9 @@ class StorySerializer(serializers.ModelSerializer):
 
     reposted_from = serializers.PrimaryKeyRelatedField(read_only=True)
     parent_user = SimpleUserSerializer(source='reposted_from.user', read_only=True)
+    is_liked = serializers.SerializerMethodField()
+    is_owner = serializers.SerializerMethodField()
+    mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
 
     class Meta:
         model = Story
@@ -622,6 +625,11 @@ class PostSerializer(serializers.ModelSerializer):
     editor_metadata = serializers.JSONField(source='editor_metadata_json', read_only=True)
 
     hashtags = HashtagSerializer(many=True, read_only=True)
+    is_liked = serializers.SerializerMethodField()
+    is_owner = serializers.SerializerMethodField()
+    is_saved = serializers.SerializerMethodField()
+    aspect_ratio = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
