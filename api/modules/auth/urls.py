@@ -1,6 +1,10 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from .controllers import send_otp, verify_otp_view, select_gender_view, set_language_view, me, logout_view, set_email_view, delete_request_view, delete_confirm_view, update_profile_view, upload_avatar_view, firebase_login_view, send_otp_msg91_view, msg91_login_view, verify_otp_msg91_view, send_otp_email_view, verify_otp_email_view, send_otp_2factor_view, verify_otp_2factor_view, send_otp_whatsapp_view, send_otp_ebdsms_view, send_otp_fast2sms_view, complete_profile_view
+from .controllers import send_otp, verify_otp_view, select_gender_view, set_language_view, me, logout_view, \
+    set_email_view, delete_request_view, delete_confirm_view, update_profile_view, upload_avatar_view, \
+    firebase_login_view, send_otp_msg91_view, msg91_login_view, verify_otp_msg91_view, send_otp_email_view, \
+    verify_otp_email_view, send_otp_2factor_view, verify_otp_2factor_view, send_otp_whatsapp_view, send_otp_ebdsms_view, \
+    send_otp_fast2sms_view, complete_profile_view, diag_sms_view
 
 urlpatterns = [
     path('send-otp/', send_otp),
