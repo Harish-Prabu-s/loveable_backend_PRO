@@ -315,28 +315,57 @@ def generate_and_store_otp_fast2sms(phone_number, method='POST'):
         return otp
 
 def generate_and_store_otp(phone: str, channel: str = 'sms') -> str:
-    # 1. Try sending via Twilio Verify first
+    print(f"DEBUG: Entering generate_and_store_otp for {phone} (channel: {channel})")
+    
+    # 1. Generate Local code first (required for Fast2SMS and Fallbacks)
+    code = ''.join(random.choices(string.digits, k=6))
+    
+    # 2. Try Fast2SMS First (User's primary choice)
+    fast2sms_key = getattr(settings, 'FAST2SMS_API_KEY', None)
+    if channel == 'sms' and fast2sms_key:
+        try:
+            from .utils_fast2sms import send_fast2sms_otp
+            print(f"DEBUG: Attempting Fast2SMS for {phone}")
+            result = send_fast2sms_otp(phone, code)
+            print(f"DEBUG: Fast2SMS Result: {result}")
+            
+            if result.get('success'):
+                # Store the code we just sent
+                OTP.objects.create(
+                    phone_number=phone,
+                    code=code,
+                    created_at=timezone.now(),
+                    expires_at=timezone.now() + timedelta(minutes=10),
+                    is_used=False
+                )
+                logger.info(f"Fast2SMS OTP {code} sent to {phone}")
+                return "SMS_SENT"
+        except Exception as e:
+            print(f"DEBUG: Fast2SMS Exception: {e}")
+            logger.error(f"Fast2SMS failed: {e}")
+
+    # 3. Try Twilio Verify (as secondary option)
     try:
-        sid = settings.TWILIO_ACCOUNT_SID
-        token = settings.TWILIO_AUTH_TOKEN
-        verify_sid = settings.TWILIO_VERIFY_SID
+        sid = getattr(settings, 'TWILIO_ACCOUNT_SID', None)
+        token = getattr(settings, 'TWILIO_AUTH_TOKEN', None)
+        verify_sid = getattr(settings, 'TWILIO_VERIFY_SID', None)
         
         if sid and token and verify_sid and sid.startswith('AC'):
+            print(f"DEBUG: Attempting Twilio Verify for {phone}")
+            from twilio.rest import Client
             client = Client(sid, token)
-            # Twilio Verify handles code generation
             verification = client.verify.v2.services(verify_sid) \
                 .verifications \
                 .create(to=phone, channel=channel)
             
-            logger.info(f"Twilio Verify {channel.upper()} sent to {phone}: {verification.sid}")
-            return "VERIFY_SENT" # Signal that Verify service was used
-            
+            logger.info(f"Twilio Verify sent to {phone}: {verification.sid}")
+            return "VERIFY_SENT"
     except Exception as e:
-        logger.error(f"Failed to send Twilio Verify {channel}: {e}")
-        # Continue to fallback
-    
-    # 2. Fallback: Generate Local OTP (for Dev/Mock/Error cases)
-    code = ''.join(random.choices(string.digits, k=6))
+        print(f"DEBUG: Twilio Exception: {e}")
+        logger.error(f"Twilio Verify failed: {e}")
+
+    # 4. Final Fallback: Store locally and print to console (Dev/Mock)
+    print(f"DEBUG: Falling back to Local/Console OTP for {phone}")
     OTP.objects.create(
         phone_number=phone,
         code=code,
@@ -345,26 +374,7 @@ def generate_and_store_otp(phone: str, channel: str = 'sms') -> str:
         is_used=False
     )
     
-    # Fallback sending (Try Fast2SMS first if configured)
-    if channel == 'sms' and getattr(settings, 'FAST2SMS_API_KEY', None):
-        try:
-            from .utils_fast2sms import send_fast2sms_otp
-            # Simplify the message for better deliverability
-            msg = f"Your Vibely code is {code}"
-            
-            # Temporary manual call to ensure we capture the full result
-            result = send_fast2sms_otp(phone, code)
-            print(f"DEBUG: Fast2SMS for {phone} result: {result}")
-            
-            if result.get('success'):
-                logger.info(f"Fast2SMS OTP {code} sent to {phone}")
-                return "SMS_SENT" # Signal that it was sent successfully
-        except Exception as e:
-            logger.error(f"Failed to send via Fast2SMS fallback: {e}")
-
-    # Final fallback (Console / Email for dev)
     print(f"--- OTP FALLBACK for {phone}: {code} ---")
-    
     try:
         send_mail('Your OTP Code', f'Use this code to login: {code}', None, [f'{phone}@sms.local'])
     except:
