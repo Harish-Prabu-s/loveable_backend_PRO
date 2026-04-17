@@ -315,38 +315,33 @@ def generate_and_store_otp_fast2sms(phone_number, method='POST'):
         return otp
 
 def generate_and_store_otp(phone: str, channel: str = 'sms') -> str:
-    log_file = os.path.join(settings.BASE_DIR, 'otp_debug.log')
-    with open(log_file, 'a') as f:
-        f.write(f"\n--- {timezone.now()} ---\n")
-        f.write(f"Entering generate_and_store_otp: phone={phone}, channel={channel}\n")
+    print(f"DEBUG: Entering generate_and_store_otp for {phone} (channel: {channel})")
     
     # 1. Generate Local code first
     code = ''.join(random.choices(string.digits, k=6))
     
     # 2. Try Fast2SMS First
     fast2sms_key = getattr(settings, 'FAST2SMS_API_KEY', None)
-    with open(log_file, 'a') as f:
-        f.write(f"FAST2SMS_API_KEY value: {fast2sms_key[:5] if fast2sms_key else 'NONE/EMPTY'}...\n")
-        f.write(f"Check: channel=='sms'({channel=='sms'}) and bool(key)({bool(fast2sms_key)})\n")
-
     if channel == 'sms' and fast2sms_key:
         try:
             from .utils_fast2sms import send_fast2sms_otp
-            with open(log_file, 'a') as f: f.write("Attempting Fast2SMS...\n")
+            print(f"DEBUG: Attempting Fast2SMS for {phone}")
             result = send_fast2sms_otp(phone, code)
-            with open(log_file, 'a') as f: f.write(f"Fast2SMS Result: {result}\n")
+            print(f"DEBUG: Fast2SMS Result for {phone}: {result}")
             
             if result.get('success'):
+                # Store the code we just sent
                 OTP.objects.create(
-                    phone_number=phone, code=code,
+                    phone_number=phone,
+                    code=code,
                     created_at=timezone.now(),
                     expires_at=timezone.now() + timedelta(minutes=10),
                     is_used=False
                 )
-                with open(log_file, 'a') as f: f.write("SMS_SENT signal returned\n")
+                logger.info(f"Fast2SMS OTP {code} sent to {phone}")
                 return "SMS_SENT"
         except Exception as e:
-            with open(log_file, 'a') as f: f.write(f"Fast2SMS Exception: {e}\n")
+            print(f"DEBUG: Fast2SMS Exception: {e}")
             logger.error(f"Fast2SMS failed: {e}")
 
     # 3. Try Twilio Verify (as secondary option)
