@@ -1,4 +1,5 @@
 from datetime import timedelta
+import os
 import random
 import string
 from typing import Optional
@@ -320,7 +321,8 @@ def generate_and_store_otp(phone: str, channel: str = 'sms', trace: list = None)
         print(f"DIAG_TRACE: {msg}")
 
     _trace(f"Entering generate_and_store_otp for {phone} (channel: {channel})")
-    fast2sms_key = getattr(settings, 'FAST2SMS_API_KEY', None)
+    # DIRECT ENV CHECK - Bypassing Django settings layer for reliability
+    fast2sms_key = os.environ.get('FAST2SMS_API_KEY') or getattr(settings, 'FAST2SMS_API_KEY', None)
     _trace(f"FAST2SMS_API_KEY configured: {bool(fast2sms_key)} (Preview: {str(fast2sms_key)[:4]}...)")
 
     # 1. Generate Local code first
