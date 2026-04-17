@@ -324,9 +324,9 @@ def generate_and_store_otp(phone: str, channel: str = 'sms') -> str:
     fast2sms_key = getattr(settings, 'FAST2SMS_API_KEY', None)
     if channel == 'sms' and fast2sms_key:
         try:
-            from .utils_fast2sms import send_fast2sms_otp
-            print(f"DEBUG: Attempting Fast2SMS for {phone}")
-            result = send_fast2sms_otp(phone, code)
+            from .utils_fast2sms import send_fast2sms_otp_get
+            print(f"DEBUG: Attempting Fast2SMS (OTP Route) for {phone}")
+            result = send_fast2sms_otp_get(phone, code)
             print(f"DEBUG: Fast2SMS Result for {phone}: {result}")
             
             if result.get('success'):
