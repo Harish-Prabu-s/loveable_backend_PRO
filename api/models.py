@@ -774,19 +774,29 @@ class UserRelationship(models.Model):
 # ── Notes Feature ───────────────────────────────────────────────────────────
 
 class Note(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='note')
-    text = models.CharField(max_length=60, blank=True)
-    audio = models.ForeignKey(Audio, on_delete=models.SET_NULL, null=True, blank=True, related_name='notes')
-    mentions = models.ManyToManyField(User, related_name='mentioned_in_notes', blank=True)
-    audio_start_sec = models.IntegerField(default=0)
-    expires_at = models.DateTimeField(null=True, blank=True)
+    NOTE_TYPE_CHOICES = (
+        ('text', 'Text'),
+        ('music', 'Music'),
+    )
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notes')
+    note_type = models.CharField(max_length=20, choices=NOTE_TYPE_CHOICES, default='text')
+    text = models.CharField(max_length=120, blank=True, null=True)
+    emoji = models.CharField(max_length=20, blank=True, null=True)
+
+    music_id = models.CharField(max_length=255, blank=True, null=True)
+    music_title = models.CharField(max_length=255, blank=True, null=True)
+    music_artist = models.CharField(max_length=255, blank=True, null=True)
+    music_thumbnail = models.URLField(blank=True, null=True)
+
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    editor_metadata_json = models.JSONField(default=dict, blank=True)
-    music_track = models.ForeignKey('MusicTrack', on_delete=models.SET_NULL, null=True, blank=True, related_name='note_usages_legacy')
+    expires_at = models.DateTimeField()
 
     def __str__(self):
-        return f"Note by {self.user.username}: {self.text[:30]}"
+        return f"Note by {self.user.username} ({self.note_type})"
+
 
 class NoteLike(models.Model):
     note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name='likes')
