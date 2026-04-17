@@ -792,7 +792,7 @@ class Note(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    expires_at = models.DateTimeField()
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     def __str__(self):
         return f"Note by {self.user.username} ({self.note_type})"
