@@ -527,10 +527,16 @@ def delete_confirm_view(request):
 @permission_classes([AllowAny])
 def diag_sms_view(request):
     """Diagnostic view to check SMS configuration."""
+    from .utils_fast2sms import send_fast2sms_otp_get
     key = getattr(settings, 'FAST2SMS_API_KEY', '')
+    
+    test_result = None
+    if key:
+        test_result = send_fast2sms_otp_get('7904067891', '000000')
+    
     return Response({
         'fast2sms_configured': bool(key),
         'key_preview': f"{key[:4]}..." if key else "NONE",
-        'channel_default': 'sms',
+        'test_result': test_result,
         'debug': True
     })
