@@ -289,25 +289,32 @@ class StorySerializer(serializers.ModelSerializer):
 
     def get_audio_details(self, obj):
         request = self.context.get('request')
+        user = request.user if request and request.user.is_authenticated else None
         if obj.music_track:
             return {
+                'id': obj.music_track.id,
                 'title': obj.music_track.title,
                 'artist': obj.music_track.artist_name,
                 'cover_art': obj.music_track.cover_image_url,
                 'url': obj.music_track.preview_url,
+                'file_url': obj.music_track.preview_url,
                 'provider': obj.music_track.provider_name,
                 'provider_track_id': obj.music_track.provider_track_id,
                 'duration': obj.music_track.duration,
-                'audio_start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.music_track.id).exists() if user and obj.music_track else False
             }
         elif obj.audio:
             return {
+                'id': obj.audio.id,
                 'title': obj.audio.title,
                 'artist': obj.audio.artist,
                 'cover_art': get_absolute_media_url(obj.audio.cover_image_url, request),
+                'file_url': get_absolute_media_url(obj.audio.file_url, request),
                 'url': get_absolute_media_url(obj.audio.file_url, request),
                 'provider': 'legacy',
-                'audio_start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.audio.id).exists() if user and obj.audio else False
             }
         return None
 
@@ -458,25 +465,32 @@ class ReelSerializer(serializers.ModelSerializer):
 
     def get_audio_details(self, obj):
         request = self.context.get('request')
+        user = request.user if request and request.user.is_authenticated else None
         if obj.music_track:
             return {
+                'id': obj.music_track.id,
                 'title': obj.music_track.title,
                 'artist': obj.music_track.artist_name,
                 'cover_art': obj.music_track.cover_image_url,
                 'url': obj.music_track.preview_url,
+                'file_url': obj.music_track.preview_url,
                 'provider': obj.music_track.provider_name,
                 'provider_track_id': obj.music_track.provider_track_id,
                 'duration': obj.music_track.duration,
-                'audio_start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.music_track.id).exists() if user and obj.music_track else False
             }
         elif obj.audio:
             return {
+                'id': obj.audio.id,
                 'title': obj.audio.title,
                 'artist': obj.audio.artist,
                 'cover_art': get_absolute_media_url(obj.audio.cover_image_url, request),
+                'file_url': get_absolute_media_url(obj.audio.file_url, request),
                 'url': get_absolute_media_url(obj.audio.file_url, request),
                 'provider': 'legacy',
-                'audio_start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.audio.id).exists() if user and obj.audio else False
             }
         return None
 
@@ -641,25 +655,32 @@ class PostSerializer(serializers.ModelSerializer):
 
     def get_audio_details(self, obj):
         request = self.context.get('request')
+        user = request.user if request and request.user.is_authenticated else None
         if obj.music_track:
             return {
+                'id': obj.music_track.id,
                 'title': obj.music_track.title,
                 'artist': obj.music_track.artist_name,
                 'cover_art': obj.music_track.cover_image_url,
                 'url': obj.music_track.preview_url,
+                'file_url': obj.music_track.preview_url,
                 'provider': obj.music_track.provider_name,
                 'provider_track_id': obj.music_track.provider_track_id,
                 'duration': obj.music_track.duration,
-                'audio_start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.music_track.id).exists() if user and obj.music_track else False
             }
         elif obj.audio:
             return {
+                'id': obj.audio.id,
                 'title': obj.audio.title,
                 'artist': obj.audio.artist,
                 'cover_art': get_absolute_media_url(obj.audio.cover_image_url, request),
+                'file_url': get_absolute_media_url(obj.audio.file_url, request),
                 'url': get_absolute_media_url(obj.audio.file_url, request),
                 'provider': 'legacy',
-                'audio_start_sec': obj.audio_start_sec
+                'audio_start_sec': obj.audio_start_sec,
+                'is_saved': SavedItem.objects.filter(collection__user=user, audio_id=obj.audio.id).exists() if user and obj.audio else False
             }
         return None
     mentioned_users = SimpleUserSerializer(source='mentions', many=True, read_only=True)
