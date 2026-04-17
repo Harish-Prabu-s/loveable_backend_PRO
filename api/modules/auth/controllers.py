@@ -526,17 +526,36 @@ def delete_confirm_view(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def diag_sms_view(request):
-    """Diagnostic view to check SMS configuration."""
+    """Deep diagnostic view to check environment state."""
+    import os
     from .utils_fast2sms import send_fast2sms_otp_get
-    key = getattr(settings, 'FAST2SMS_API_KEY', '')
+    
+    # 1. Check Django Settings
+    settings_key = getattr(settings, 'FAST2SMS_API_KEY', '')
+    
+    # 2. Check OS Environ directly (might be set but not in settings)
+    os_key = os.environ.get('FAST2SMS_API_KEY', '')
+    
+    # 3. Check for .env file presence on remote
+    env_exists = os.path.exists(os.path.join(settings.BASE_DIR, '.env'))
     
     test_result = None
-    if key:
+    if settings_key or os_key:
+        final_key = settings_key or os_key
+        # Temporary override if found in os but not settings
+        if not settings_key and os_key:
+            settings.FAST2SMS_API_KEY = os_key
+        
         test_result = send_fast2sms_otp_get('7904067891', '000000')
     
     return Response({
-        'fast2sms_configured': bool(key),
-        'key_preview': f"{key[:4]}..." if key else "NONE",
+        'django_settings_configured': bool(settings_key),
+        'os_environ_configured': bool(os_key),
+        'env_file_detected': env_exists,
+        'base_dir': str(settings.BASE_DIR),
         'test_result': test_result,
-        'debug': True
+        'debug_info': {
+            'settings_preview': f"{settings_key[:4]}..." if settings_key else "NONE",
+            'os_preview': f"{os_key[:4]}..." if os_key else "NONE",
+        }
     })
