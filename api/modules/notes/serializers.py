@@ -18,7 +18,7 @@ class NoteSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user_id', 'username', 'display_name', 'profile_image',
             'note_type', 'text', 'emoji', 
-            'music_id', 'music_title', 'music_artist', 'music_thumbnail',
+            'music_id', 'music_title', 'music_artist', 'music_thumbnail', 'music_image',
             'music_url', 'lyrics',
             'is_active', 'created_at', 'updated_at', 'expires_at', 
             'is_mine', 'likes_count', 'is_liked'
@@ -59,7 +59,7 @@ class CreateOrReplaceNoteSerializer(serializers.ModelSerializer):
         model = Note
         fields = [
             'note_type', 'text', 'emoji', 
-            'music_id', 'music_title', 'music_artist', 'music_thumbnail',
+            'music_id', 'music_title', 'music_artist', 'music_thumbnail', 'music_image',
             'music_url', 'lyrics'
         ]
 

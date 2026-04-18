@@ -788,6 +788,7 @@ class Note(models.Model):
     music_title = models.CharField(max_length=255, blank=True, null=True)
     music_artist = models.CharField(max_length=255, blank=True, null=True)
     music_thumbnail = models.URLField(blank=True, null=True)
+    music_image = models.URLField(max_length=1000, blank=True, null=True)
     music_url = models.URLField(max_length=1000, blank=True, null=True)
     lyrics = models.TextField(blank=True, null=True)
 
