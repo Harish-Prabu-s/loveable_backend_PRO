@@ -101,10 +101,17 @@ def get_chat_row(request):
     # Actually, let's stick to following but ensure it works.
     
     other_notes_queryset = Note.objects.filter(
-        user_id__in=following_ids,
         is_active=True,
         expires_at__gt=timezone.now()
-    ).exclude(user=request.user).select_related('user', 'user__profile').order_by('-created_at')
+    ).exclude(user=request.user)
+    
+    # Filter by following if possible, otherwise show all active for discoverability/testing
+    if following_ids.exists():
+        following_notes = other_notes_queryset.filter(user_id__in=following_ids)
+        if following_notes.exists():
+            other_notes_queryset = following_notes
+            
+    other_notes_queryset = other_notes_queryset.select_related('user', 'user__profile').order_by('-created_at')[:15]
     
     other_notes_objs = annotate_note_queryset(other_notes_queryset, request.user)
     notes = ChatRowNoteSerializer(other_notes_objs, many=True, context={'request': request}).data
