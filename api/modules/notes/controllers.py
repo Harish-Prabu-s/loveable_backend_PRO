@@ -64,10 +64,23 @@ def create_or_replace_note(request):
             expires_at__gt=timezone.now()
         ).update(is_active=False)
         
+        # Auto-fetch lyrics if music note and lyrics missing
+        lyrics = serializer.validated_data.get('lyrics')
+        if not lyrics and serializer.validated_data.get('note_type') == 'music':
+            music_id = serializer.validated_data.get('music_id')
+            if music_id:
+                try:
+                    from ..audio.saavn_service import SaavnClient
+                    client = SaavnClient()
+                    lyrics = client.get_lyrics(music_id)
+                except Exception as e:
+                    print(f"[Notes] Auto-lyrics fetch failed: {e}")
+        
         # Create new note
         new_note = serializer.save(
             user=request.user,
             is_active=True,
+            lyrics=lyrics,
             expires_at=timezone.now() + timedelta(hours=24)
         )
         

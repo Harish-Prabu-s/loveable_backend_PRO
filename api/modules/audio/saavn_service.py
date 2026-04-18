@@ -93,6 +93,35 @@ class SaavnClient:
             print(f"[Saavn] Decryption failed: {e}")
             return None
 
+    def get_lyrics(self, track_id):
+        """
+        Fetches lyrics for a specific track ID.
+        """
+        if not track_id:
+            return None
+            
+        params = {
+            '__call': 'lyrics.getLyrics',
+            '_format': 'json',
+            '_marker': '0',
+            'api_version': '4',
+            'ctx': 'web6dot0',
+            'lyrics_id': track_id
+        }
+        
+        try:
+            response = requests.get(self.base_url, params=params, headers=self.headers)
+            if response.status_code == 200:
+                data = response.json()
+                lyrics_html = data.get('lyrics', '')
+                # Clean up HTML if present
+                if lyrics_html:
+                    return html.unescape(lyrics_html).replace('<br />', '\n').strip()
+        except Exception as e:
+            print(f"[Saavn] Lyrics fetch failed: {e}")
+            
+        return None
+
     def _map_track(self, item):
         """
         Maps Saavn JSON response to our unified AudioTrack interface.
