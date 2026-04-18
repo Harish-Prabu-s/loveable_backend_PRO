@@ -808,6 +808,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     is_close_friend = serializers.SerializerMethodField()
     followers_count = serializers.SerializerMethodField()
     following_count = serializers.SerializerMethodField()
+    posts_count = serializers.SerializerMethodField()
     friend_request_status = serializers.SerializerMethodField()
     photo = serializers.SerializerMethodField()
     is_busy = serializers.SerializerMethodField()
@@ -822,7 +823,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             'date_joined', 'last_login', 'email', 'display_name', 'bio', 'photo',
             'interests', 'age', 'location', 'language', 'app_lock_enabled',
             'created_at', 'updated_at', 'is_following', 'is_close_friend', 'followers_count', 'following_count',
-            'friend_request_status', 'highlights'
+            'posts_count', 'friend_request_status', 'highlights'
         ]
 
     def get_is_busy(self, obj):
@@ -863,6 +864,12 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     def get_following_count(self, obj):
         return Follow.objects.filter(follower=obj.user).count()
+
+    def get_posts_count(self, obj):
+        from .models import Post, Reel
+        p_count = Post.objects.filter(user=obj.user, is_archived=False).count()
+        r_count = Reel.objects.filter(user=obj.user, is_archived=False).count()
+        return p_count + r_count
 
     def get_friend_request_status(self, obj):
         request = self.context.get('request')
