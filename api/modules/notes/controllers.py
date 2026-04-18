@@ -97,19 +97,17 @@ def get_chat_row(request):
     from ...models import Follow
     following_ids = Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
     
-    # If following no one, maybe show everyone for discoverability or testing?
-    # Actually, let's stick to following but ensure it works.
-    
-    other_notes_queryset = Note.objects.filter(
+    all_notes = Note.objects.filter(
         is_active=True,
         expires_at__gt=timezone.now()
     ).exclude(user=request.user)
     
-    # Filter by following if possible, otherwise show all active for discoverability/testing
-    if following_ids.exists():
-        following_notes = other_notes_queryset.filter(user_id__in=following_ids)
-        if following_notes.exists():
-            other_notes_queryset = following_notes
+    # Prioritize notes from followed users, fallback to all active if none found
+    friend_notes = all_notes.filter(user_id__in=following_ids)
+    if friend_notes.exists():
+        other_notes_queryset = friend_notes
+    else:
+        other_notes_queryset = all_notes
             
     other_notes_queryset = other_notes_queryset.select_related('user', 'user__profile').order_by('-created_at')[:15]
     
