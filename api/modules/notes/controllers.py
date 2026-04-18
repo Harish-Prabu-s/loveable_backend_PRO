@@ -25,22 +25,31 @@ def annotate_note_queryset(queryset, user):
         is_liked=is_liked
     )
 
-@api_view(['GET'])
+@api_view(['GET', 'DELETE'])
 @permission_classes([IsAuthenticated])
-def get_my_note(request):
-    """Fetch the current user's active note."""
-    queryset = Note.objects.filter(
-        user=request.user,
-        is_active=True,
-        expires_at__gt=timezone.now()
-    )
-    note = annotate_note_queryset(queryset, request.user).first()
-    
-    if not note:
-        return Response({'note': None})
+def manage_my_note(request):
+    """Fetch or delete the current user's active note."""
+    if request.method == 'GET':
+        queryset = Note.objects.filter(
+            user=request.user,
+            is_active=True,
+            expires_at__gt=timezone.now()
+        )
+        note = annotate_note_queryset(queryset, request.user).first()
         
-    serializer = MyNoteSerializer(note, context={'request': request})
-    return Response({'note': serializer.data})
+        if not note:
+            return Response({'note': None})
+            
+        serializer = MyNoteSerializer(note, context={'request': request})
+        return Response({'note': serializer.data})
+    
+    elif request.method == 'DELETE':
+        Note.objects.filter(
+            user=request.user,
+            is_active=True,
+            expires_at__gt=timezone.now()
+        ).update(is_active=False)
+        return Response({'status': 'deleted'}, status=status.HTTP_204_NO_CONTENT)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -68,17 +77,6 @@ def create_or_replace_note(request):
         
         return Response(NoteSerializer(annotated_note, context={'request': request}).data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
-def delete_my_note(request):
-    """Mark current active note as inactive."""
-    Note.objects.filter(
-        user=request.user,
-        is_active=True,
-        expires_at__gt=timezone.now()
-    ).update(is_active=False)
-    return Response({'status': 'deleted'}, status=status.HTTP_204_NO_CONTENT)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
