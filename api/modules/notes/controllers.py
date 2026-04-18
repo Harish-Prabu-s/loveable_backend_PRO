@@ -49,7 +49,7 @@ def manage_my_note(request):
             is_active=True,
             expires_at__gt=timezone.now()
         ).update(is_active=False)
-        return Response({'status': 'deleted'}, status=status.HTTP_204_NO_CONTENT)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
