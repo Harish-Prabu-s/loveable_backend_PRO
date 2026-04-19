@@ -976,3 +976,49 @@ class PublishedMusicAttachment(models.Model):
     music_volume = models.FloatField(default=1.0)
     created_at = models.DateTimeField(auto_now_add=True)
 
+
+class Lyric(models.Model):
+    track = models.OneToOneField(MusicTrack, on_delete=models.CASCADE, related_name='lyrics_v2')
+    language = models.CharField(max_length=50, default='original')
+    source = models.CharField(max_length=100, blank=True, null=True)
+    is_synced = models.BooleanField(default=False)
+    raw_lrc_data = models.TextField(blank=True, null=True) # Storage for original LRC format
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Lyrics for {self.track.title}"
+
+class LyricLine(models.Model):
+    lyric = models.ForeignKey(Lyric, on_delete=models.CASCADE, related_name='lines')
+    text = models.TextField()
+    start_time_ms = models.IntegerField() # Milliseconds from start
+    end_time_ms = models.IntegerField(null=True, blank=True)
+    order = models.IntegerField(default=0)
+    translated_text = models.TextField(blank=True, null=True)
+    romanized_text = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['start_time_ms', 'order']
+
+    def __str__(self):
+        return f"[{self.start_time_ms}ms] {self.text[:30]}"
+
+class UserFavoriteLyric(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='favorite_lyrics')
+    lyric_line = models.ForeignKey(LyricLine, on_delete=models.CASCADE, related_name='favorited_by')
+    note = models.ForeignKey(Note, on_delete=models.SET_NULL, null=True, blank=True) # Context where it was favorited
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'lyric_line')
+
+class LyricBookmark(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='lyric_bookmarks')
+    track = models.ForeignKey(MusicTrack, on_delete=models.CASCADE)
+    timestamp_ms = models.IntegerField()
+    label = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['timestamp_ms']

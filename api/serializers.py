@@ -8,7 +8,8 @@ from .models import (
     Badge, DailyReward, Room, Message, Story, Gift, GiftTransaction, StoryView, Follow, Reel, Streak, Post, PostLike,
     CloseFriend, PostView, ReelView, StreakView, StreakUpload, MessageReaction, Note,
     Highlight, HighlightStory, Collection, SavedItem, FavoriteAudio, Hashtag, EditorDraft, FilterSelection, OverlayItem,
-    MusicClipSelection, MusicTrack, MediaAsset, PublishedContent, PublishedMusicAttachment
+    MusicClipSelection, MusicTrack, MediaAsset, PublishedContent, PublishedMusicAttachment,
+    Lyric, LyricLine, UserFavoriteLyric, LyricBookmark
 )
 from .utils import get_absolute_media_url
 from .models import Audio
@@ -947,3 +948,37 @@ class PublishedContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = PublishedContent
         fields = '__all__'
+
+class LyricLineSerializer(serializers.ModelSerializer):
+    is_favorited = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LyricLine
+        fields = ['id', 'text', 'start_time_ms', 'end_time_ms', 'order', 'translated_text', 'romanized_text', 'is_favorited']
+
+    def get_is_favorited(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return UserFavoriteLyric.objects.filter(user=request.user, lyric_line=obj).exists()
+        return False
+
+class LyricSerializer(serializers.ModelSerializer):
+    lines = LyricLineSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Lyric
+        fields = ['id', 'language', 'source', 'is_synced', 'lines', 'created_at', 'updated_at']
+
+class UserFavoriteLyricSerializer(serializers.ModelSerializer):
+    lyric_line_details = LyricLineSerializer(source='lyric_line', read_only=True)
+
+    class Meta:
+        model = UserFavoriteLyric
+        fields = ['id', 'user', 'lyric_line', 'lyric_line_details', 'note', 'created_at']
+        read_only_fields = ['user']
+
+class LyricBookmarkSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LyricBookmark
+        fields = ['id', 'user', 'track', 'timestamp_ms', 'label', 'created_at']
+        read_only_fields = ['user']

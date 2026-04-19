@@ -3,8 +3,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import viewsets, status
 from django.db import models
-from ...models import Audio, FavoriteAudio
-from ...serializers import AudioSerializer
+from ...models import Audio, FavoriteAudio, Lyric, LyricLine, UserFavoriteLyric, MusicTrack
+from ...serializers import AudioSerializer, LyricSerializer, LyricLineSerializer
 
 class AudioViewSet(viewsets.ModelViewSet):
     queryset = Audio.objects.all().order_by('-created_at')
@@ -159,3 +159,46 @@ def search_audios_view(request):
     ).order_by('-is_trending', '-created_at')[:50]
     serializer = AudioSerializer(qs, many=True, context={'request': request})
     return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_synced_lyrics(request, music_id):
+    """
+    Fetch synced lyrics for a given music_id (provider_track_id).
+    """
+    # Try to find existing lyrics in DB first
+    try:
+        track = MusicTrack.objects.filter(provider_track_id=music_id).first()
+        if track:
+            lyric_obj = Lyric.objects.filter(track=track).first()
+            if lyric_obj:
+                serializer = LyricSerializer(lyric_obj, context={'request': request})
+                return Response(serializer.data)
+    except Exception as e:
+        print(f"[Lyrics] DB Fetch failed: {e}")
+
+    # If not found or not synced, we could trigger a background fetch/sync process here.
+    # For now, return 404 or a basic response.
+    return Response({'detail': 'Synced lyrics not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_favorite_line(request):
+    """
+    Toggle favorite status for a specific lyric line.
+    """
+    line_id = request.data.get('line_id')
+    if not line_id:
+        return Response({'detail': 'line_id required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        line = LyricLine.objects.get(id=line_id)
+        fav, created = UserFavoriteLyric.objects.get_or_create(user=request.user, lyric_line=line)
+        
+        if not created:
+            fav.delete()
+            return Response({'is_favorited': False})
+        
+        return Response({'is_favorited': True})
+    except LyricLine.DoesNotExist:
+        return Response({'detail': 'Lyric line not found'}, status=status.HTTP_404_NOT_FOUND)
