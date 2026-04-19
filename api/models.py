@@ -784,6 +784,13 @@ class Note(models.Model):
     text = models.CharField(max_length=120, blank=True, null=True)
     emoji = models.CharField(max_length=20, blank=True, null=True)
 
+    # Styling & Visuals
+    mood = models.CharField(max_length=100, blank=True, null=True)
+    font_style = models.CharField(max_length=50, default='classic')
+    background_config = models.JSONField(default=dict, blank=True)
+    sticker_metadata = models.JSONField(default=dict, blank=True)
+
+    # Music metadata
     music_id = models.CharField(max_length=255, blank=True, null=True)
     music_title = models.CharField(max_length=255, blank=True, null=True)
     music_artist = models.CharField(max_length=255, blank=True, null=True)
@@ -791,6 +798,8 @@ class Note(models.Model):
     music_image = models.URLField(max_length=1000, blank=True, null=True)
     music_url = models.URLField(max_length=1000, blank=True, null=True)
     lyrics = models.TextField(blank=True, null=True)
+    clip_start_ms = models.IntegerField(default=0)
+    clip_end_ms = models.IntegerField(default=0)
 
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -808,6 +817,21 @@ class NoteLike(models.Model):
 
     class Meta:
         unique_together = ('note', 'user')
+
+
+class NoteComment(models.Model):
+    note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name='comments')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    text = models.TextField()
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
+    likes = models.ManyToManyField(User, related_name='liked_note_comments', blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Comment by {self.user.username} on {self.note}"
 
 
 # ── Multi-Image Posts ────────────────────────────────────────────────────────

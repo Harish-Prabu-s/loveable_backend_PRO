@@ -5,12 +5,13 @@ from rest_framework import status
 from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Q, Count, Exists, OuterRef
-from ...models import Note, Audio, NoteLike, User
+from ...models import Note, Audio, NoteLike, User, NoteComment
 from .serializers import (
     NoteSerializer, 
     CreateOrReplaceNoteSerializer, 
     MyNoteSerializer, 
-    ChatRowNoteSerializer
+    ChatRowNoteSerializer,
+    NoteCommentSerializer
 )
 
 def annotate_note_queryset(queryset, user):
@@ -78,12 +79,6 @@ def create_or_replace_note(request):
                 if not serializer.validated_data.get('lyrics'):
                     enriched_data['lyrics'] = client.get_lyrics(music_id)
                 
-                # Auto-fetch high-res image if missing
-                if not serializer.validated_data.get('music_image'):
-                    # We can use Saavn search or trending fetch to get metadata if needed, 
-                    # but usually, we can just hope it's passed. 
-                    # However, SaavnClient._map_track already upgrades image URLs.
-                    pass
             except Exception as e:
                 print(f"[Notes] Auto-enrichment failed: {e}")
         
@@ -149,7 +144,13 @@ def get_note_detail(request, pk):
         queryset = Note.objects.filter(pk=pk, is_active=True, expires_at__gt=timezone.now())
         note = annotate_note_queryset(queryset, request.user).get()
         serializer = NoteSerializer(note, context={'request': request})
-        return Response(serializer.data)
+        # Add comments
+        comments = note.comments.all().select_related('user', 'user__profile').order_by('-created_at')
+        comment_serializer = NoteCommentSerializer(comments, many=True, context={'request': request})
+        
+        data = serializer.data
+        data['comments'] = comment_serializer.data
+        return Response(data)
     except Note.DoesNotExist:
         return Response({'detail': 'Note not found or expired'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -165,11 +166,67 @@ def toggle_like(request, pk):
             liked = False
         else:
             liked = True
+            # Notification for like
+            from ..notifications.services import create_notification
+            create_notification(
+                recipient=note.user,
+                actor=request.user,
+                notification_type='note_like',
+                message=f'❤️ {request.user.username} liked your note',
+                object_id=note.id
+            )
         
         likes_count = note.likes.count()
         return Response({'is_liked': liked, 'likes_count': likes_count})
     except Note.DoesNotExist:
         return Response({'detail': 'Note not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def post_comment(request, pk):
+    """Post a comment on a note."""
+    try:
+        note = Note.objects.get(pk=pk)
+        text = request.data.get('text')
+        if not text:
+            return Response({'detail': 'Text is required'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        comment = NoteComment.objects.create(
+            note=note,
+            user=request.user,
+            text=text
+        )
+        
+        # Notification for comment
+        from ..notifications.services import create_notification
+        create_notification(
+            recipient=note.user,
+            actor=request.user,
+            notification_type='note_comment',
+            message=f'💬 {request.user.username} commented: {text[:30]}...',
+            object_id=note.id
+        )
+        
+        serializer = NoteCommentSerializer(comment, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    except Note.DoesNotExist:
+        return Response({'detail': 'Note not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_like_comment(request, comment_id):
+    """Toggle like on a note comment."""
+    try:
+        comment = NoteComment.objects.get(pk=comment_id)
+        if comment.likes.filter(id=request.user.id).exists():
+            comment.likes.remove(request.user)
+            liked = False
+        else:
+            comment.likes.add(request.user)
+            liked = True
+        return Response({'is_liked': liked, 'likes_count': comment.likes.count()})
+    except NoteComment.DoesNotExist:
+        return Response({'detail': 'Comment not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
