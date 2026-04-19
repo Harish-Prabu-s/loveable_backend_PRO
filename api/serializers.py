@@ -148,10 +148,29 @@ class RoomSerializer(serializers.ModelSerializer):
     receiver_profile = SimpleUserSerializer(source='receiver', read_only=True)
     group_avatar = serializers.SerializerMethodField()
     collage_photos = serializers.SerializerMethodField()
+    other_user_note = serializers.SerializerMethodField()
 
     class Meta:
         model = Room
-        fields = ['id', 'caller', 'receiver', 'caller_profile', 'receiver_profile', 'call_type', 'status', 'started_at', 'ended_at', 'duration_seconds', 'coins_spent', 'created_at', 'chat_theme', 'disappearing_messages_enabled', 'disappearing_timer', 'is_group', 'name', 'group_avatar', 'collage_photos', 'is_archived']
+        fields = ['id', 'caller', 'receiver', 'caller_profile', 'receiver_profile', 'call_type', 'status', 'started_at', 'ended_at', 'duration_seconds', 'coins_spent', 'created_at', 'chat_theme', 'disappearing_messages_enabled', 'disappearing_timer', 'is_group', 'name', 'group_avatar', 'collage_photos', 'is_archived', 'other_user_note']
+
+    def get_other_user_note(self, obj):
+        if obj.is_group:
+            return None
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        
+        other_user = obj.receiver if obj.caller == request.user else obj.caller
+        try:
+            from .models import Note
+            from .modules.notes.serializers import NoteSerializer
+            note = Note.objects.filter(user=other_user).first()
+            if note and (not note.expires_at or note.expires_at > timezone.now()):
+                return NoteSerializer(note, context=self.context).data
+        except:
+            pass
+        return None
 
     def get_group_avatar(self, obj):
         request = self.context.get('request')
@@ -597,14 +616,10 @@ class ContactSerializer(serializers.Serializer):
             
         try:
             from .models import Note
+            from .modules.notes.serializers import NoteSerializer
             note = Note.objects.filter(user_id=user_id).first()
             if note and (not note.expires_at or note.expires_at > timezone.now()):
-                return {
-                    'text': note.text,
-                    'audio_title': note.audio.title if note.audio else None,
-                    'audio_url': get_absolute_media_url(note.audio.file_url, self.context.get('request')) if note.audio else None,
-                    'created_at': note.created_at
-                }
+                return NoteSerializer(note, context=self.context).data
         except:
             pass
         return None
