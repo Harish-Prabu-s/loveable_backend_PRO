@@ -112,3 +112,37 @@ def create_game_room_view(request):
         'room_type': room.room_type,
         'session_id': session.id
     })
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def join_room_view(request):
+    room_code = request.data.get('room_code')
+    if not room_code:
+        return Response({'status': 'error', 'message': 'Room code required'}, status=400)
+    
+    try:
+        room = GameRoom.objects.get(room_code=room_code)
+        session = InteractiveGameSession.objects.get(room=room)
+        
+        # Add player if not already in
+        player, created = PlayerState.objects.get_or_create(
+            session=session,
+            user=request.user,
+            defaults={'is_connected': True}
+        )
+        
+        if not created:
+            player.is_connected = True
+            player.save()
+            
+        return Response({
+            'id': room.id,
+            'room_code': room.room_code,
+            'room_type': room.room_type,
+            'session_id': session.id,
+            'game_type': session.game_type if hasattr(session, 'game_type') else 'truth_dare'
+        })
+    except GameRoom.DoesNotExist:
+        return Response({'status': 'error', 'message': 'Invalid room code'}, status=404)
+    except Exception as e:
+        return Response({'status': 'error', 'message': str(e)}, status=500)
