@@ -1,15 +1,15 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from api.models import Room, InteractiveGameSession, PlayerState, QuestionBank, GameEventLog
+from api.models import GameRoom, InteractiveGameSession, PlayerState, QuestionBank, GameEventLog
 from django.contrib.auth.models import User
 import random
 from .couple_game_consumer import CoupleGameConsumer
 
 class GameConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        self.room_id = self.scope['url_route']['kwargs']['room_id']
-        self.room_group_name = f'game_{self.room_id}'
+        self.session_id = self.scope['url_route']['kwargs']['session_id']
+        self.room_group_name = f'game_session_{self.session_id}'
         self.user = self.scope['user']
 
         if self.user.is_anonymous:
@@ -95,14 +95,17 @@ class GameConsumer(AsyncWebsocketConsumer):
 
     async def handle_submit_action(self, payload):
         session = await self.get_current_session()
-        if session and session.current_turn_player == self.user:
+        # For board games, we might not have a "current_turn_player" set in DB yet, 
+        # but we check if session exists.
+        if session:
             await self.update_session_action(session, payload)
             
+            # Broadcast the action to everyone
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     'type': 'game_message',
-                    'event': 'VoteRequested',
+                    'event': 'ActionBroadcast',
                     'player_id': self.user.id,
                     'payload': payload
                 }
@@ -130,16 +133,12 @@ class GameConsumer(AsyncWebsocketConsumer):
     # --- DB UTILS ---
     @database_sync_to_async
     def get_or_create_session(self):
-        room = Room.objects.get(id=self.room_id)
-        session, created = InteractiveGameSession.objects.get_or_create(
-            room=room,
-            defaults={'current_state': 'Waiting'}
-        )
-        return session, created
+        session = InteractiveGameSession.objects.get(id=self.session_id)
+        return session, False
 
     @database_sync_to_async
     def get_current_session(self):
-        return InteractiveGameSession.objects.filter(room_id=self.room_id).last()
+        return InteractiveGameSession.objects.filter(id=self.session_id).first()
 
     @database_sync_to_async
     def set_player_status(self, session, status):

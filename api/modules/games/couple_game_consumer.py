@@ -16,8 +16,8 @@ class CoupleGameConsumer(AsyncWebsocketConsumer):
     """
     
     async def connect(self):
-        self.room_id = self.scope['url_route']['kwargs']['room_id']
-        self.room_group_name = f'couple_game_{self.room_id}'
+        self.session_id = self.scope['url_route']['kwargs']['session_id']
+        self.room_group_name = f'couple_game_session_{self.session_id}'
         self.user = self.scope['user']
 
         if self.user.is_anonymous:
@@ -168,21 +168,13 @@ class CoupleGameConsumer(AsyncWebsocketConsumer):
     
     @database_sync_to_async
     def get_or_create_session(self):
-        room = Room.objects.get(id=self.room_id)
-        # Find or create a matching GameRoom entry
-        game_room, _ = GameRoom.objects.get_or_create(
-            id=room.id,
-            defaults={'room_type': 'couple', 'status': 'in_progress'}
-        )
-        session, _ = InteractiveGameSession.objects.get_or_create(
-            room=game_room,
-            defaults={'current_state': 'Waiting'}
-        )
+        # Use session directly
+        session = InteractiveGameSession.objects.get(id=self.session_id)
         return session
 
     @database_sync_to_async
     def get_current_session(self):
-        return InteractiveGameSession.objects.filter(room_id=self.room_id).last()
+        return InteractiveGameSession.objects.filter(id=self.session_id).first()
 
     @database_sync_to_async
     def set_player_status(self, session, status):

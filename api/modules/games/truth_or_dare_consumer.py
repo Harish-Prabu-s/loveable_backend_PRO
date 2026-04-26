@@ -14,8 +14,8 @@ class TruthOrDareConsumer(AsyncWebsocketConsumer):
         self.timer_task = None
 
     async def connect(self):
-        self.room_id = self.scope['url_route']['kwargs']['room_id']
-        self.room_group_name = f'tod_{self.room_id}'
+        self.session_id = self.scope['url_route']['kwargs']['session_id']
+        self.room_group_name = f'tod_session_{self.session_id}'
         self.user = self.scope['user']
 
         if self.user.is_anonymous:
@@ -229,16 +229,12 @@ class TruthOrDareConsumer(AsyncWebsocketConsumer):
     # --- DB UTILS ---
     @database_sync_to_async
     def get_or_create_session(self):
-        room, _ = GameRoom.objects.get_or_create(room_code=self.room_id, defaults={'room_type': 'random'})
-        session, created = InteractiveGameSession.objects.get_or_create(
-            room=room,
-            defaults={'current_state': 'Waiting'}
-        )
-        return session, created
+        session = InteractiveGameSession.objects.get(id=self.session_id)
+        return session, False
 
     @database_sync_to_async
     def get_current_session(self):
-        return InteractiveGameSession.objects.filter(room__room_code=self.room_id).last()
+        return InteractiveGameSession.objects.filter(id=self.session_id).first()
 
     @database_sync_to_async
     def get_session_by_id(self, sid):
