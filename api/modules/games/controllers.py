@@ -73,7 +73,9 @@ def create_game_room_view(request):
     room_type = request.data.get('room_type', 'group')
     target_id = request.data.get('target_user_id')
     
-    room_code = uuid.uuid4().hex[:8]
+    import random, string
+    room_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    
     room = GameRoom.objects.create(
         host=request.user,
         room_code=room_code,

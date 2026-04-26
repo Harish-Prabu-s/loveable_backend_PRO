@@ -26,6 +26,8 @@ urlpatterns = [
     # Diagnostic Trap: If these are hit, then the connection is failing to upgrade to WebSocket.
     path('ws/call/room/<str:room_id>/', diagnostic_view),
     path('api/ws/call/room/<str:room_id>/', diagnostic_view),
+    path('ws/game/<str:room_id>/', diagnostic_view),
+    path('api/ws/game/<str:room_id>/', diagnostic_view),
 ]
 
 # Always serve media files via Django (fallback setup)
