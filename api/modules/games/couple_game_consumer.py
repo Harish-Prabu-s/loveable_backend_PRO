@@ -21,7 +21,8 @@ class CoupleGameConsumer(AsyncWebsocketConsumer):
         self.user = self.scope['user']
 
         if self.user.is_anonymous:
-            await self.close()
+            # Code 4001 indicates Auth Failure
+            await self.close(code=4001)
             return
 
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)

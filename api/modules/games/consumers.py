@@ -13,7 +13,8 @@ class GameConsumer(AsyncWebsocketConsumer):
         self.user = self.scope['user']
 
         if self.user.is_anonymous:
-            await self.close()
+            # Code 4001 indicates Auth Failure (Token invalid or missing)
+            await self.close(code=4001)
             return
 
         await self.channel_layer.group_add(
