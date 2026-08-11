@@ -102,8 +102,8 @@ def create_post(user, caption: str, image=None, cover_image=None, visibility='al
             try:
                 title = audio_meta.get('title', 'Original Audio')
                 artist = audio_meta.get('artist', 'Unknown')
-                cover_url = audio_meta.get('coverArt', '')
-                ext_url = audio_meta.get('url', '')
+                cover_url = audio_meta.get('cover_image_url', '') or audio_meta.get('coverArt', '')
+                ext_url = audio_meta.get('file_url', '') or audio_meta.get('url', '')
                 
                 audio = Audio.objects.filter(title=title, artist=artist).first()
                 created = False
