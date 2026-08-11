@@ -63,8 +63,8 @@ def _serialize_audio(post, request):
         return {
             'id': music_track.provider_track_id or getattr(music_track, 'id', ''),
             'title': music_track.title,
-            'artist': music_track.artist,
-            'file_url': music_track.preview_url or music_track.stream_url,
+            'artist': getattr(music_track, 'artist_name', ''),
+            'file_url': getattr(music_track, 'preview_url', None) or (get_absolute_media_url(music_track.audio_url, request) if getattr(music_track, 'audio_url', None) else ''),
             'cover_image_url': music_track.cover_image_url,
             'audio_start_sec': post.audio_start_sec,
             'source': music_track.provider_name
