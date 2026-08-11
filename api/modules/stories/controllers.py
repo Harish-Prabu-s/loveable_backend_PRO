@@ -46,6 +46,7 @@ def create_story_view(request):
     audio_meta = request.data.get('audio_meta')
     audio_start_sec = request.data.get('audio_start_sec', 0)
     mentions = request.data.get('mentions', [])
+    editor_metadata = request.data.get('editor_metadata')
     
     if isinstance(audio_meta, str):
         try:
@@ -54,9 +55,17 @@ def create_story_view(request):
         except:
             pass
 
+    if isinstance(editor_metadata, str):
+        try:
+            import json
+            editor_metadata = json.loads(editor_metadata)
+        except:
+            editor_metadata = {}
+
     story = create_story(
         request.user, relative_media_path, media_type, visibility, caption, 
-        mentions=mentions, audio_id=audio_id, audio_meta=audio_meta, audio_start_sec=audio_start_sec
+        mentions=mentions, audio_id=audio_id, audio_meta=audio_meta, audio_start_sec=audio_start_sec,
+        editor_metadata=editor_metadata
     )
     return Response(StorySerializer(story, context={'request': request}).data, status=201)
 

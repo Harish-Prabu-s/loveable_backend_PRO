@@ -16,7 +16,7 @@ def get_active_stories(user):
         (models.Q(visibility='close_friends') & models.Q(user__close_friends__close_friend=user))
     ).select_related('user__profile').prefetch_related('views').order_by('-created_at').distinct()
 
-def create_story(user, media_url: str, media_type: str = 'image', visibility='all', caption: str = '', mentions=None, audio_id=None, audio_meta=None, audio_start_sec=0):
+def create_story(user, media_url: str, media_type: str = 'image', visibility='all', caption: str = '', mentions=None, audio_id=None, audio_meta=None, audio_start_sec=0, editor_metadata=None):
     from ...models import Audio
     expires_at = timezone.now() + timedelta(hours=24)
     story = Story.objects.create(
@@ -26,7 +26,8 @@ def create_story(user, media_url: str, media_type: str = 'image', visibility='al
         expires_at=expires_at, 
         visibility=visibility,
         caption=caption,
-        audio_start_sec=int(audio_start_sec or 0)
+        audio_start_sec=int(audio_start_sec or 0),
+        editor_metadata_json=editor_metadata or {}
     )
     
     # Handle Audio
