@@ -51,8 +51,39 @@ def _serialize_post(post, request_user, request=None):
             'display_name': getattr(u, 'profile', u).display_name if hasattr(u, 'profile') else u.username,
             'photo': get_absolute_media_url(u.profile.photo, request) if hasattr(u, 'profile') and u.profile.photo else None,
         } for u in post.mentions.all()],
-        'images': [get_absolute_media_url(img.image, request) for img in post.images.all()]
+        'images': [get_absolute_media_url(img.image, request) for img in post.images.all()],
+        'editor_metadata': getattr(post, 'editor_metadata_json', {}),
+        'audio_details': _serialize_audio(post, request)
     }
+
+def _serialize_audio(post, request):
+    # Try Modern MusicTrack first
+    music_track = getattr(post, 'music_track', None)
+    if music_track:
+        return {
+            'id': music_track.provider_track_id or getattr(music_track, 'id', ''),
+            'title': music_track.title,
+            'artist': music_track.artist,
+            'file_url': music_track.preview_url or music_track.stream_url,
+            'cover_image_url': music_track.cover_image_url,
+            'audio_start_sec': post.audio_start_sec,
+            'source': music_track.provider_name
+        }
+        
+    # Fallback to Legacy Audio
+    audio = getattr(post, 'audio', None)
+    if audio:
+        return {
+            'id': audio.id,
+            'title': audio.title,
+            'artist': audio.artist,
+            'file_url': get_absolute_media_url(audio.file_url, request),
+            'cover_image_url': audio.cover_image_url,
+            'audio_start_sec': post.audio_start_sec,
+            'source': 'local'
+        }
+    return None
+
 
 
 @api_view(['GET'])
