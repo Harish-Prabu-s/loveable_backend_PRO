@@ -48,7 +48,7 @@ def get_feed(user, search: str = None, category: str = None):
     if category != 'Trending':
         qs = qs.order_by('-created_at')
 
-    return qs[:50].distinct()
+    return qs.distinct()[:50]
 
 
 import base64
