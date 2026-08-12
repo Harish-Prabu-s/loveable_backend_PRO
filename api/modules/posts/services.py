@@ -5,9 +5,9 @@ from django.core.files.base import ContentFile
 
 from django.db import models
 
-def get_feed(user, search: str = None):
+def get_feed(user, search: str = None, category: str = None):
     """Return all posts optimized with counts and like status."""
-    from django.db.models import Count, Exists, OuterRef, F
+    from django.db.models import Count, Exists, OuterRef, F, Q
     
     # Subquery to check if current user liked the post
     is_liked_subquery = PostLike.objects.filter(
@@ -29,14 +29,26 @@ def get_feed(user, search: str = None):
         )
     )
 
+    if category == 'Following':
+        qs = qs.filter(user__followers__follower=user)
+    elif category == 'Trending':
+        qs = qs.order_by('-popularity_score', '-created_at')
+    elif category == 'Music':
+        qs = qs.filter(Q(audio__isnull=False) | Q(music_track__isnull=False))
+    elif category == 'Moods':
+        qs = qs.filter(caption__iregex=r'mood|feel|vibes|alone|sad|happy')
+
     if search:
         search = search.lower().strip()
         if search.startswith('#'):
             qs = qs.filter(hashtags__name__icontains=search.lstrip('#'))
         else:
-            qs = qs.filter(models.Q(caption__icontains=search) | models.Q(hashtags__name__icontains=search))
+            qs = qs.filter(Q(caption__icontains=search) | Q(hashtags__name__icontains=search))
+        
+    if category != 'Trending':
+        qs = qs.order_by('-created_at')
 
-    return qs.order_by('-popularity_score', '-created_at').distinct()
+    return qs[:50].distinct()
 
 
 import base64

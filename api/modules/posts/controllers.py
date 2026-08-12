@@ -90,7 +90,8 @@ def _serialize_audio(post, request):
 @permission_classes([IsAuthenticated])
 def feed_view(request):
     search = request.GET.get('search')
-    posts = get_feed(request.user, search=search)
+    category = request.GET.get('category')
+    posts = get_feed(request.user, search=search, category=category)
     data = [_serialize_post(p, request.user, request) for p in posts]
     return Response(data)
 
