@@ -62,7 +62,7 @@ class SimpleUserSerializer(serializers.ModelSerializer):
         try:
             profile = getattr(obj, 'profile', None)
             if profile and profile.last_active:
-                return (timezone.now() - profile.last_active).total_seconds() < 1
+                return (timezone.now() - profile.last_active).total_seconds() < 45
             return False
         except:
             return False
@@ -539,7 +539,7 @@ class ReelSerializer(serializers.ModelSerializer):
     def get_is_online(self, obj):
         from django.utils import timezone
         if obj.last_active:
-            return (timezone.now() - obj.last_active).total_seconds() < 1
+            return (timezone.now() - obj.last_active).total_seconds() < 45
         return obj.is_online
 
     def get_is_following(self, obj):
@@ -866,7 +866,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     def get_is_online(self, obj):
         from django.utils import timezone
         if obj.last_active:
-            return (timezone.now() - obj.last_active).total_seconds() < 1
+            return (timezone.now() - obj.last_active).total_seconds() < 45
         return obj.is_online
 
     def get_phone_number(self, obj):
