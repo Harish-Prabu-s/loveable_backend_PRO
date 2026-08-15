@@ -147,12 +147,22 @@ class TurnCredentialsView(APIView):
             # Fast STUN paths (no relay, free)
             {'urls': 'stun:stun.l.google.com:19302'},
             {'urls': 'stun:stun1.l.google.com:19302'},
-            # Self-hosted TURN: UDP primary, TCP fallback, TLS secured fallback
+            # Free robust TURN fallback for Emulator and Strict NAT testing
+            {
+                'urls': [
+                    'turn:openrelay.metered.ca:80',
+                    'turn:openrelay.metered.ca:443',
+                    'turn:openrelay.metered.ca:443?transport=tcp'
+                ],
+                'username': 'openrelayproject',
+                'credential': 'openrelayproject',
+            },
+            # Self-hosted TURN (future production)
             {
                 'urls': [
                     f'turn:{turn_host}:3478?transport=udp',
                     f'turn:{turn_host}:3478?transport=tcp',
-                    f'turns:{turn_host}:5349?transport=tcp',  # TLS — penetrates strict firewalls
+                    f'turns:{turn_host}:5349?transport=tcp',
                 ],
                 'username': username,
                 'credential': credential,
