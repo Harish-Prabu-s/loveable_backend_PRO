@@ -63,6 +63,12 @@ def get_absolute_media_url(path, request=None):
     if not path:
         return None
 
+    path_str = str(path)
+
+    # Already an absolute S3/external URL — return as-is
+    if path_str.startswith('http://') or path_str.startswith('https://'):
+        return path_str
+
     # ── S3 storage: let django-storages generate the correct presigned URL ──
     if _is_s3_storage():
         # If it's a FileField/ImageField object, call .url to get the S3 presigned URL
@@ -73,12 +79,6 @@ def get_absolute_media_url(path, request=None):
                     return url
             except Exception:
                 pass
-
-        path_str = str(path)
-
-        # Already an absolute S3/external URL — return as-is
-        if path_str.startswith('http://') or path_str.startswith('https://'):
-            return path_str
 
         # It's a relative path stored in the DB — generate S3 URL via default_storage
         if path_str:
