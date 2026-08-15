@@ -215,11 +215,12 @@ AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME', 'loveable-bu
 AWS_S3_ENDPOINT_URL = os.environ.get('AWS_S3_ENDPOINT_URL', 'https://innoida.utho.io')
 AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', 'ap-south-in-noida-1')
 AWS_S3_FILE_OVERWRITE = False
-AWS_DEFAULT_ACL = None  # None avoids 403 Forbidden on providers that do not support ACLs
-AWS_S3_ADDRESSING_STYLE = 'virtual'
+AWS_DEFAULT_ACL = None  # Utho does not support ACLs (NotImplemented)
+AWS_S3_ADDRESSING_STYLE = 'path'  # Use path style for Utho compatibility
 AWS_S3_SIGNATURE_VERSION = 's3v4'
-AWS_S3_CUSTOM_DOMAIN = 'bucket-loveable-bucket.innoida.utho.io'
-AWS_QUERYSTRING_AUTH = False  # Generate clean URLs instead of expiring ones
+AWS_S3_CUSTOM_DOMAIN = None  # Disable custom domain so presigned URLs work correctly
+AWS_QUERYSTRING_AUTH = True  # Use presigned URLs since bucket cannot be made public
+AWS_QUERYSTRING_EXPIRE = 604800  # 7 days in seconds
 
 STORAGES = {
     "default": {
