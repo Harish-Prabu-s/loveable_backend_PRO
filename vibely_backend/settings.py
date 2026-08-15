@@ -218,6 +218,7 @@ AWS_S3_FILE_OVERWRITE = False
 AWS_DEFAULT_ACL = None  # None avoids 403 Forbidden on providers that do not support ACLs
 AWS_S3_ADDRESSING_STYLE = 'virtual'
 AWS_S3_SIGNATURE_VERSION = 's3v4'
+AWS_S3_CUSTOM_DOMAIN = 'bucket-loveable-bucket.innoida.utho.io'
 AWS_QUERYSTRING_AUTH = False  # Generate clean URLs instead of expiring ones
 
 STORAGES = {
