@@ -10,7 +10,23 @@ def _extract_and_match_audio_sync(reel_id):
         reel = Reel.objects.get(pk=reel_id)
         if not reel.video_url:
             return
-        video_path = reel.video_url.path
+            
+        import tempfile
+        import requests
+        
+        # Download video to a temp file
+        video_url_full = reel.video_url.url
+        temp_video = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        try:
+            r = requests.get(video_url_full, stream=True)
+            for chunk in r.iter_content(chunk_size=8192):
+                temp_video.write(chunk)
+            temp_video.close()
+            video_path = temp_video.name
+        except Exception as e:
+            print("Download Error:", e)
+            os.unlink(temp_video.name)
+            return
 
         # 1. Extract Audio
         audio_filename = f"audio_{reel.id}.mp3"
@@ -69,6 +85,13 @@ def _extract_and_match_audio_sync(reel_id):
         reel.audio = audio
         reel.save()
         
+        # Cleanup
+        try:
+            os.unlink(video_path)
+            os.unlink(audio_path)
+        except:
+            pass
+            
     except Exception as e:
         print("Extract Audio Task Error:", e)
 
