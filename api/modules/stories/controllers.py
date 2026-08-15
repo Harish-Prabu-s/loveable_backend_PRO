@@ -84,15 +84,15 @@ def upload_story_media_view(request):
         else:
             file = request.FILES['media']
 
-        fs = FileSystemStorage(location=settings.MEDIA_ROOT / 'stories', base_url=settings.MEDIA_URL + 'stories/')
+        from django.core.files.storage import default_storage
         
         # Use a safe unique filename avoiding special characters from client
         import os
         ext = os.path.splitext(file.name)[1].lower() or '.jpg'
-        safe_filename = f"{request.user.id}_{uuid.uuid4().hex}{ext}"
+        safe_filename = f"stories/{request.user.id}_{uuid.uuid4().hex}{ext}"
         
-        filename = fs.save(safe_filename, file)
-        url = request.build_absolute_uri(fs.url(filename))
+        filename = default_storage.save(safe_filename, file)
+        url = request.build_absolute_uri(default_storage.url(filename))
         return Response({'url': url}, status=201)
     except Exception as e:
         return Response({'error': str(e)}, status=500)

@@ -69,13 +69,12 @@ def upload_reel_media_view(request):
             return Response({'error': 'media file required'}, status=400)
         
         file = request.FILES['media']
-        fs = FileSystemStorage(location=settings.MEDIA_ROOT / 'reels', base_url=settings.MEDIA_URL + 'reels/')
-        
+        from django.core.files.storage import default_storage
         ext = os.path.splitext(file.name)[1].lower() or '.mp4'
-        safe_filename = f"{request.user.id}_{uuid.uuid4().hex}{ext}"
+        safe_filename = f"reels/{request.user.id}_{uuid.uuid4().hex}{ext}"
         
-        filename = fs.save(safe_filename, file)
-        url = request.build_absolute_uri(fs.url(filename))
+        filename = default_storage.save(safe_filename, file)
+        url = request.build_absolute_uri(default_storage.url(filename))
         return Response({'url': url}, status=201)
     except Exception as e:
         return Response({'error': str(e)}, status=500)

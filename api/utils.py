@@ -29,9 +29,16 @@ def strip_base_url(path):
             return relative_path[len(f'/{media_url}/'):]
         elif relative_path.startswith(f'{media_url}/'):
             return relative_path[len(f'{media_url}/'):]
+            
+        # Check if it's an S3 URL for our bucket
+        bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', None)
+        if bucket_name and f"/{bucket_name}/" in relative_path:
+            path_without_query = relative_path.split('?')[0]
+            idx = path_without_query.find(f"/{bucket_name}/")
+            if idx != -1:
+                return path_without_query[idx + len(f"/{bucket_name}/"):]
 
     return path_str
-
 
 def _is_s3_storage():
     """Check if the default storage backend is S3."""
