@@ -864,6 +864,9 @@ class ProfileSerializer(serializers.ModelSerializer):
         return presence_status(obj.user.id) == 'busy'
 
     def get_is_online(self, obj):
+        from django.utils import timezone
+        if obj.last_active:
+            return (timezone.now() - obj.last_active).total_seconds() < 45
         return obj.is_online
 
     def get_phone_number(self, obj):
