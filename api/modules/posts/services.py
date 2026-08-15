@@ -274,7 +274,8 @@ def share_post(post_id: int, user, target_user_id: int, request=None):
         room = get_or_create_room(user, target_user.id, 'audio')
         
         # Create Message for sharing
-        msg_media_url = get_absolute_media_url(post.image, request)
+        # Use relative path to avoid 'Data too long' errors for presigned S3 URLs
+        msg_media_url = post.image.name if post.image else None
         Message.objects.create(
             room=room,
             sender=user,
