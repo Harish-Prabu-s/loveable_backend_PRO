@@ -41,6 +41,7 @@ urlpatterns = [
 
     # Legacy endpoints remain accessible if needed
     path('health/', views.health_check),
+    path('presence/ping/', views.presence_ping),
     path('webhook', views.whatsapp_webhook),
     # path('auth/me/', views.me),
     # path('wallet/', views.wallet),

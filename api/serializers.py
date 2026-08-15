@@ -52,10 +52,20 @@ class SimpleUserSerializer(serializers.ModelSerializer):
     photo = serializers.SerializerMethodField()
     gender = serializers.CharField(source='profile.gender', read_only=True)
     user_id = serializers.IntegerField(source='id', read_only=True)
+    is_online = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'user_id', 'username', 'display_name', 'photo', 'gender']
+        fields = ['id', 'user_id', 'username', 'display_name', 'photo', 'gender', 'is_online']
+
+    def get_is_online(self, obj):
+        try:
+            profile = getattr(obj, 'profile', None)
+            if profile and profile.last_active:
+                return (timezone.now() - profile.last_active).total_seconds() < 45
+            return False
+        except:
+            return False
 
     def get_display_name(self, obj):
         profile = getattr(obj, 'profile', None)
@@ -526,6 +536,12 @@ class ReelSerializer(serializers.ModelSerializer):
             return obj.user == request.user
         return False
 
+    def get_is_online(self, obj):
+        from django.utils import timezone
+        if obj.last_active:
+            return (timezone.now() - obj.last_active).total_seconds() < 45
+        return obj.is_online
+
     def get_is_following(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
@@ -828,6 +844,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     friend_request_status = serializers.SerializerMethodField()
     photo = serializers.SerializerMethodField()
     is_busy = serializers.SerializerMethodField()
+    is_online = serializers.SerializerMethodField()
     phone_number = serializers.SerializerMethodField()
     email = serializers.EmailField(read_only=True)
     highlights = HighlightSerializer(many=True, read_only=True)

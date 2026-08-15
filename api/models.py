@@ -97,6 +97,7 @@ class Profile(models.Model):
     is_verified = models.BooleanField(default=False)
     is_online = models.BooleanField(default=False)
     is_busy = models.BooleanField(default=False)
+    last_active = models.DateTimeField(null=True, blank=True)
     date_joined = models.DateTimeField(default=timezone.now)
     last_login = models.DateTimeField(null=True, blank=True)
     email = models.EmailField(null=True, blank=True)

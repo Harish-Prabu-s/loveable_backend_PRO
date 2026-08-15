@@ -59,6 +59,22 @@ def health_check(request):
         'timestamp': timezone.now().isoformat()
     }, status=status_code)
 
+@api_view(['POST'])
+def presence_ping(request):
+    """
+    Update the user's last_active timestamp to indicate they are online.
+    """
+    if request.user.is_authenticated:
+        try:
+            profile = request.user.profile
+            profile.last_active = timezone.now()
+            profile.is_online = True # Keep for backwards compatibility
+            profile.save(update_fields=['last_active', 'is_online'])
+            return Response({'status': 'ok', 'last_active': profile.last_active})
+        except Exception as e:
+            return Response({'status': 'error', 'detail': str(e)}, status=400)
+    return Response({'status': 'unauthorized'}, status=401)
+
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def whatsapp_webhook(request):
