@@ -122,16 +122,22 @@ def toggle_reel_like(reel_id: int, user: User):
         like, created = ReelLike.objects.get_or_create(reel=reel, user=user)
         if not created:
             like.delete()
+            # Recalculate engagement after unlike
+            try:
+                from api.modules.feed.engagement import recalculate_reel_score
+                recalculate_reel_score(reel)
+            except Exception:
+                pass
             return {'liked': False, 'likes_count': reel.likes.count()}
-        
+
         # Notify owner
         if reel.user != user:
             from ..notifications.services import create_notification
             from ..notifications.push_service import send_push_notification, _get_user_tokens
-            
+
             profile = getattr(user, 'profile', None)
             sender_name = profile.display_name if profile else user.username
-            
+
             create_notification(
                 recipient=reel.user,
                 actor=user,
@@ -139,7 +145,7 @@ def toggle_reel_like(reel_id: int, user: User):
                 message=f"{sender_name} liked your reel!",
                 object_id=reel.id
             )
-            
+
             tokens = _get_user_tokens(reel.user_id)
             if tokens:
                 send_push_notification(
@@ -148,6 +154,13 @@ def toggle_reel_like(reel_id: int, user: User):
                     body=f"{sender_name} liked your reel!",
                     data={'type': 'reel_like', 'reel_id': reel.id}
                 )
+
+        # Recalculate engagement after like
+        try:
+            from api.modules.feed.engagement import recalculate_reel_score
+            recalculate_reel_score(reel)
+        except Exception:
+            pass
 
         return {'liked': True, 'likes_count': reel.likes.count(), 'reel': reel}
     except Reel.DoesNotExist:
@@ -202,6 +215,13 @@ def share_reel_to_chat(reel_id: int, sender: User, target_user_id: int):
             )
         except Exception as e:
             print(f"Error awarding coins for sharing reel: {e}")
+
+        # Increment share count & recalculate engagement score
+        try:
+            from api.modules.feed.engagement import increment_reel_share
+            increment_reel_share(reel.id)
+        except Exception:
+            pass
 
         return {'success': True, 'target_user': target_user, 'reel': reel}
     except (Reel.DoesNotExist, User.DoesNotExist):

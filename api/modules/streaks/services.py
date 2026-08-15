@@ -40,14 +40,33 @@ def get_user_streaks_service(user: User, request=None):
 
 def upload_streak_service(user: User, media, media_type, visibility, caption: str = '', mentions=None, audio_id=None, audio_meta=None, audio_start_sec=0):
     from ...models import Audio
+    from django.core.files.storage import default_storage
+    import uuid as _uuid
+
+    # ── Lossless Compression ────────────────────────────────────────────────────
+    # Convert images → WebP lossless, compress videos >20MB → HEVC CRF 18.
+    # Zero quality loss — only codec efficiency savings.
+    try:
+        from api.utils.media_compress import validate_and_compress
+        compress_type = 'video' if media_type == 'video' else 'image'
+        content, new_ext, err = validate_and_compress(media, compress_type)
+        filename = f"streaks/{user.id}_{_uuid.uuid4().hex}{new_ext}"
+        saved_path = default_storage.save(filename, content)
+        media_to_save = saved_path
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[StreakUpload] Compression failed ({e}), saving original.")
+        media_to_save = media  # fall back to raw file
+
     upload = StreakUpload.objects.create(
         user=user,
-        media_url=media,
+        media_url=media_to_save,
         media_type=media_type,
         visibility=visibility,
         caption=caption,
         audio_start_sec=int(audio_start_sec or 0)
     )
+
     
     # Handle Audio
     if audio_id:

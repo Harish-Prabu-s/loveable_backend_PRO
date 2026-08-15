@@ -60,6 +60,10 @@ class Post(models.Model):
     editor_metadata_json = models.JSONField(default=dict, blank=True)
     music_track = models.ForeignKey('MusicTrack', on_delete=models.SET_NULL, null=True, blank=True, related_name='post_usages')
     created_at = models.DateTimeField(auto_now_add=True)
+    # ── Feed Algorithm Fields ──────────────────────────────────────────────────
+    engagement_score = models.FloatField(default=0.0, db_index=True)
+    view_count       = models.PositiveIntegerField(default=0)
+    share_count      = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return f"Post by {self.user.username} at {self.created_at}"
@@ -552,6 +556,10 @@ class Reel(models.Model):
     editor_metadata_json = models.JSONField(default=dict, blank=True)
     music_track = models.ForeignKey('MusicTrack', on_delete=models.SET_NULL, null=True, blank=True, related_name='%(class)s_usages')
     created_at = models.DateTimeField(auto_now_add=True)
+    # ── Feed Algorithm Fields ──────────────────────────────────────────────────
+    engagement_score = models.FloatField(default=0.0, db_index=True)
+    view_count       = models.PositiveIntegerField(default=0)
+    share_count      = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return f"Reel by {self.user.username} at {self.created_at}"

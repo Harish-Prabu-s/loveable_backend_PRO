@@ -67,14 +67,20 @@ def upload_reel_media_view(request):
     try:
         if 'media' not in request.FILES:
             return Response({'error': 'media file required'}, status=400)
-        
+
         file = request.FILES['media']
+        content_type = file.content_type or ''
+        file_type = 'video' if content_type.startswith('video') else 'image'
+
+        from api.utils.media_compress import validate_and_compress
+        content, new_ext, err = validate_and_compress(file, file_type)
+        if err:
+            return Response({'error': err}, status=400)
+
         from django.core.files.storage import default_storage
-        ext = os.path.splitext(file.name)[1].lower() or '.mp4'
-        safe_filename = f"reels/{request.user.id}_{uuid.uuid4().hex}{ext}"
-        
-        filename = default_storage.save(safe_filename, file)
-        url = request.build_absolute_uri(default_storage.url(filename))
+        filename = f"reels/{request.user.id}_{uuid.uuid4().hex}{new_ext}"
+        saved_name = default_storage.save(filename, content)
+        url = request.build_absolute_uri(default_storage.url(saved_name))
         return Response({'url': url}, status=201)
     except Exception as e:
         return Response({'error': str(e)}, status=500)

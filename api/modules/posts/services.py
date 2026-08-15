@@ -188,6 +188,14 @@ def toggle_like(post_id: int, user):
                 send_push_notification(tokens, title="New Like!", body=f"{sender_name} liked your post!", data={'type': 'post_like', 'post_id': post.id})
 
     likes_count = PostLike.objects.filter(post=post).count()
+
+    # Recalculate engagement score for feed algorithm
+    try:
+        from api.modules.feed.engagement import recalculate_post_score
+        recalculate_post_score(post)
+    except Exception:
+        pass
+
     return {'is_liked': is_liked, 'likes_count': likes_count}
 
 def add_comment(post_id: int, user, text: str, reply_to_id: int = None):
@@ -320,6 +328,13 @@ def share_post(post_id: int, user, target_user_id: int, request=None):
             )
         except Exception as e:
             print(f"Error awarding coins for sharing post: {e}")
+
+        # Increment share count & recalculate engagement score
+        try:
+            from api.modules.feed.engagement import increment_post_share
+            increment_post_share(post.id)
+        except Exception:
+            pass
 
         return True
     except (Post.DoesNotExist, User.DoesNotExist):

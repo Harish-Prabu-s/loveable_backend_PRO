@@ -80,19 +80,21 @@ def upload_story_media_view(request):
     print(f"DEBUG Story Upload: data={request.data}, files={request.FILES}")
     try:
         if 'media' not in request.FILES:
-             return Response({'error': 'media file required. Found keys: ' + str(list(request.FILES.keys()) + list(request.data.keys()))}, status=400)
-        else:
-            file = request.FILES['media']
+            return Response({'error': 'media file required. Found keys: ' + str(list(request.FILES.keys()) + list(request.data.keys()))}, status=400)
+
+        file = request.FILES['media']
+        content_type = file.content_type or ''
+        file_type = 'video' if content_type.startswith('video') else 'image'
+
+        from api.utils.media_compress import validate_and_compress
+        content, new_ext, err = validate_and_compress(file, file_type)
+        if err:
+            return Response({'error': err}, status=400)
 
         from django.core.files.storage import default_storage
-        
-        # Use a safe unique filename avoiding special characters from client
-        import os
-        ext = os.path.splitext(file.name)[1].lower() or '.jpg'
-        safe_filename = f"stories/{request.user.id}_{uuid.uuid4().hex}{ext}"
-        
-        filename = default_storage.save(safe_filename, file)
-        url = request.build_absolute_uri(default_storage.url(filename))
+        safe_filename = f"stories/{request.user.id}_{uuid.uuid4().hex}{new_ext}"
+        saved_name = default_storage.save(safe_filename, content)
+        url = request.build_absolute_uri(default_storage.url(saved_name))
         return Response({'url': url}, status=201)
     except Exception as e:
         return Response({'error': str(e)}, status=500)

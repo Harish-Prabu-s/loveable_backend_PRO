@@ -462,14 +462,30 @@ def upload_avatar_view(request):
     """
     Standardized avatar upload endpoint.
     Expects 'photo' or 'avatar' file in request.FILES.
+    Image is converted to WebP lossless (zero quality loss, smaller file).
     """
     p = request.user.profile
-    # Accept both field names for flexibility
     photo_file = request.FILES.get('photo') or request.FILES.get('avatar')
-    
+
     if photo_file:
-        p.photo = photo_file
-        p.save()
+        try:
+            from api.utils.media_compress import validate_and_compress
+            from django.core.files.base import ContentFile
+            import uuid, os
+
+            content, new_ext, err = validate_and_compress(photo_file, 'image')
+            if err:
+                return Response({'error': err}, status=400)
+
+            # Build a clean filename and save via Django's field save()
+            filename = f"profile/{request.user.id}_{uuid.uuid4().hex}{new_ext}"
+            p.photo.save(filename, content, save=True)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[AvatarUpload] Compression failed ({e}), saving original.")
+            p.photo = photo_file
+            p.save()
+
         profile_data = get_user_profile_data(request.user, request)
         return Response({
             'success': True,

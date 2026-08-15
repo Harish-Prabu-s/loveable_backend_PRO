@@ -36,6 +36,7 @@ urlpatterns = [
     path('hashtags/', include('api.modules.hashtags.urls')),
     path('notes/', include('api.modules.notes.urls')),
     path('modern/', include('api.modules.modern.urls')),
+    path('feed/', include('api.modules.feed.urls')),
 
 
     # Legacy endpoints remain accessible if needed
