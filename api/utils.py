@@ -18,25 +18,29 @@ def strip_base_url(path):
     match = re.search(r'(?:https?://[^/]+)?(/.*)', path_str)
     if match:
         relative_path = match.group(1)
-        # Strip the MEDIA_URL part if it exists at the start
-        media_url = settings.MEDIA_URL.strip('/')
-        # Ensure we have a leading slash if not present
-        if not relative_path.startswith('/'):
-            relative_path = '/' + relative_path
-
-        # Standard clean way to get the path inside media
-        if relative_path.startswith(f'/{media_url}/'):
-            return relative_path[len(f'/{media_url}/'):]
-        elif relative_path.startswith(f'{media_url}/'):
-            return relative_path[len(f'{media_url}/'):]
-            
-        # Check if it's an S3 URL for our bucket
+        
+        # 1. Check if it's an S3 URL for our bucket first
         bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', None)
         if bucket_name and f"/{bucket_name}/" in relative_path:
             path_without_query = relative_path.split('?')[0]
             idx = path_without_query.find(f"/{bucket_name}/")
             if idx != -1:
                 return path_without_query[idx + len(f"/{bucket_name}/"):]
+
+        # 2. Strip the MEDIA_URL part if it exists at the start
+        media_url = getattr(settings, 'MEDIA_URL', '').strip('/')
+        if media_url:
+            if not relative_path.startswith('/'):
+                relative_path = '/' + relative_path
+
+            if relative_path.startswith(f'/{media_url}/'):
+                return relative_path[len(f'/{media_url}/'):]
+            elif relative_path.startswith(f'{media_url}/'):
+                return relative_path[len(f'{media_url}/'):]
+                
+        # 3. If MEDIA_URL is just '/', strip the leading slash but discard query params
+        path_without_query = relative_path.split('?')[0]
+        return path_without_query.lstrip('/')
 
     return path_str
 
