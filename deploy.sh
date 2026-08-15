@@ -20,6 +20,7 @@ echo "3. Installing dependencies..."
 pip install -r requirements.txt
 
 echo "4. Running database migrations..."
+python manage.py makemigrations
 python manage.py migrate
 
 echo "5. Collecting static files..."
