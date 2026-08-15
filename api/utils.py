@@ -33,31 +33,71 @@ def strip_base_url(path):
     return path_str
 
 
+def _is_s3_storage():
+    """Check if the default storage backend is S3."""
+    try:
+        storage_backend = settings.STORAGES.get('default', {}).get('BACKEND', '')
+        return 's3' in storage_backend.lower() or 'boto' in storage_backend.lower()
+    except Exception:
+        return False
+
+
 def get_absolute_media_url(path, request=None):
     """
     Safely constructs an absolute URL for a media file.
-    - Robustly handles cases where path is already absolute (possibly with wrong host/IP).
-    - If path is relative → prepends MEDIA_URL and builds absolute URI using request.
+    - When S3 storage is active: calls .url on the field to get the presigned S3 URL directly.
+    - When local storage: builds absolute URI using the request or SERVER_URL.
+    - Handles already-absolute external URLs (Spotify, JioSaavn, etc.) transparently.
     """
     if not path:
         return None
 
+    # ── S3 storage: let django-storages generate the correct presigned URL ──
+    if _is_s3_storage():
+        # If it's a FileField/ImageField object, call .url to get the S3 presigned URL
+        if hasattr(path, 'url'):
+            try:
+                url = path.url
+                if url:
+                    return url
+            except Exception:
+                pass
+
+        path_str = str(path)
+
+        # Already an absolute S3/external URL — return as-is
+        if path_str.startswith('http://') or path_str.startswith('https://'):
+            return path_str
+
+        # It's a relative path stored in the DB — generate S3 URL via default_storage
+        if path_str:
+            try:
+                from django.core.files.storage import default_storage
+                return default_storage.url(path_str.lstrip('/'))
+            except Exception:
+                pass
+
+        return path_str
+
+    # ── Local storage fallback (original logic) ──────────────────────────────
     path_str = str(path)
     is_production = os.environ.get('ENV') == 'production'
 
-    # 🔗 Handle already absolute URLs
+    # Handle FileField/ImageField objects
+    if hasattr(path, 'url'):
+        try:
+            path_str = path.url
+        except Exception:
+            pass
+
+    # Handle already absolute URLs
     if path_str.startswith('http://') or path_str.startswith('https://'):
-        # If it's a doubled up URL (e.g. domain.com/https://external.com)
-        # We strip the local part and return the external part.
         match = re.search(r'https?://[^/]+/(https?://.*)', path_str)
         if match:
             return match.group(1)
 
-        # If we have a request, check if it's a known internal domain that needs rerouting
         if request:
-            # Check if it's a known local/internal domain
             is_internal_domain = any(h in path_str for h in ['localhost', '127.0.0.1', '10.0.2.2', '192.168.', 'loveable.sbs', '72.62.195.63'])
-            
             if is_internal_domain:
                 match = re.search(r'https?://[^/]+(/.*)', path_str)
                 if match:
@@ -69,14 +109,12 @@ def get_absolute_media_url(path, request=None):
                             return absolute_url.replace('http://', 'https://', 1)
                         return absolute_url
 
-        # For genuine external URLs (like JioSaavn or Spotify), just return as is
-        # but upgrade to https in production if needed
         if is_production and path_str.startswith('http://') and not any(
                 h in path_str for h in ['localhost', '127.0.0.1', '10.0.2.2']):
             return path_str.replace('http://', 'https://', 1)
         return path_str
 
-    # Standardize relative path
+    # Relative path
     clean_path = path_str.lstrip('/')
     media_url = settings.MEDIA_URL.rstrip('/')
     media_url_clean = media_url.lstrip('/')
@@ -92,11 +130,8 @@ def get_absolute_media_url(path, request=None):
             return absolute_url.replace('http://', 'https://', 1)
         return absolute_url
 
-    # FALLBACK: If no request is provided, we try to use the SERVER_URL from environment
-    # or just return the relative URL if we can't determine the host.
     server_url = os.environ.get('SERVER_URL', '').rstrip('/')
     if server_url:
-        # SERVER_URL usually ends in /api/, so we might need to get the root
         base_match = re.match(r'(https?://[^/]+)', server_url)
         if base_match:
             base_url = base_match.group(1)
