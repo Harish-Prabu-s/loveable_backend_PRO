@@ -863,6 +863,9 @@ class ProfileSerializer(serializers.ModelSerializer):
         from .modules.chat.services import presence_status
         return presence_status(obj.user.id) == 'busy'
 
+    def get_is_online(self, obj):
+        return obj.is_online
+
     def get_phone_number(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated and obj.user == request.user:
