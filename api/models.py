@@ -19,7 +19,7 @@ class Hashtag(models.Model):
 class Audio(models.Model):
     title = models.CharField(max_length=255, default='Original Audio')
     artist = models.CharField(max_length=255, null=True, blank=True)
-    file_url = models.FileField(upload_to='audios/', max_length=1000)
+    file_url = models.FileField(upload_to='audio/', max_length=1000)
     cover_image_url = models.URLField(max_length=500, null=True, blank=True)
     duration_ms = models.IntegerField(default=0)
     is_trending = models.BooleanField(default=False)
@@ -48,13 +48,13 @@ class FavoriteAudio(models.Model):
 class Post(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='api_posts')
     caption = models.TextField(blank=True)
-    image = models.ImageField(upload_to='posts/', null=True, blank=True)
+    image = models.ImageField(upload_to='post/', null=True, blank=True)
     visibility = models.CharField(max_length=20, default='all')
     mentions = models.ManyToManyField(User, related_name='mentioned_in_posts', blank=True)
     audio = models.ForeignKey(Audio, on_delete=models.SET_NULL, null=True, blank=True, related_name='posts')
     audio_start_sec = models.IntegerField(default=0)
     hashtags = models.ManyToManyField(Hashtag, related_name='posts', blank=True)
-    cover_image = models.ImageField(upload_to='posts/covers/', null=True, blank=True)
+    cover_image = models.ImageField(upload_to='post/covers/', null=True, blank=True)
     reposted_from = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='reposts')
     is_archived = models.BooleanField(default=False)
     editor_metadata_json = models.JSONField(default=dict, blank=True)
@@ -511,7 +511,7 @@ class CloseFriend(models.Model):
 
 class Story(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='stories')
-    media_url = models.FileField(upload_to='stories/', null=True, blank=True)
+    media_url = models.FileField(upload_to='streaks/', null=True, blank=True)
     media_type = models.CharField(max_length=10, default='image') # 'image' or 'video'
     caption = models.TextField(blank=True)
     visibility = models.CharField(max_length=20, default='all')

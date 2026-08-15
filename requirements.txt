@@ -87,3 +87,5 @@ PyMySQL==1.1.2
 moviepy==1.0.3
 shazamio==0.5.1
 pycryptodome
+django-storages==1.14.2
+boto3==1.34.60
