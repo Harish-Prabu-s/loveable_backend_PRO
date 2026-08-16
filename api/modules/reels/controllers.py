@@ -117,7 +117,7 @@ def create_reel_view(request):
         except:
             pass
             
-    cover_image = request.FILES.get('cover_image')  # Optional
+    cover_image = request.FILES.get('cover_image')
             
     editor_metadata = request.data.get('editor_metadata')
     if isinstance(editor_metadata, str):
