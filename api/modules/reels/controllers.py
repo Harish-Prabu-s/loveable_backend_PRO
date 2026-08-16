@@ -70,7 +70,13 @@ def upload_reel_media_view(request):
 
         file = request.FILES['media']
         content_type = file.content_type or ''
-        file_type = 'video' if content_type.startswith('video') else 'image'
+        filename_lower = (file.name or '').lower()
+
+        # Robust file type detection: use content_type first, fall back to extension
+        if content_type.startswith('video') or filename_lower.endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp')):
+            file_type = 'video'
+        else:
+            file_type = 'image'
 
         from api.utils.media_compress import validate_and_compress
         content, new_ext, err = validate_and_compress(file, file_type)
@@ -83,6 +89,8 @@ def upload_reel_media_view(request):
         url = request.build_absolute_uri(default_storage.url(saved_name))
         return Response({'url': url}, status=201)
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return Response({'error': str(e)}, status=500)
 
 @api_view(['POST'])
@@ -109,9 +117,7 @@ def create_reel_view(request):
         except:
             pass
             
-    cover_image = request.FILES.get('cover_image')
-    if not cover_image:
-        return Response({'error': 'Cover image is mandatory'}, status=400)
+    cover_image = request.FILES.get('cover_image')  # Optional
             
     editor_metadata = request.data.get('editor_metadata')
     if isinstance(editor_metadata, str):
