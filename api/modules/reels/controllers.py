@@ -69,24 +69,36 @@ def upload_reel_media_view(request):
             return Response({'error': 'media file required'}, status=400)
 
         file = request.FILES['media']
-        content_type = file.content_type or ''
         filename_lower = (file.name or '').lower()
 
-        # Robust file type detection: use content_type first, fall back to extension
-        if content_type.startswith('video') or filename_lower.endswith(('.mp4', '.mov', '.avi', '.mkv', '.webm', '.3gp')):
-            file_type = 'video'
+        # Determine extension from filename (most reliable source on mobile uploads)
+        if filename_lower.endswith('.mov'):
+            ext = '.mov'
+        elif filename_lower.endswith('.avi'):
+            ext = '.avi'
+        elif filename_lower.endswith('.mkv'):
+            ext = '.mkv'
+        elif filename_lower.endswith('.webm'):
+            ext = '.webm'
         else:
-            file_type = 'image'
+            ext = '.mp4'  # Default for all video uploads
 
-        from api.utils.media_compress import validate_and_compress
-        content, new_ext, err = validate_and_compress(file, file_type)
-        if err:
-            return Response({'error': err}, status=400)
-
+        # Save directly to S3 — skip FFmpeg compression entirely.
+        # Mobile cameras already produce H.264/H.265 video — no server-side re-encoding needed.
         from django.core.files.storage import default_storage
-        filename = f"reels/{request.user.id}_{uuid.uuid4().hex}{new_ext}"
-        saved_name = default_storage.save(filename, content)
-        url = request.build_absolute_uri(default_storage.url(saved_name))
+        from django.core.files.base import ContentFile
+
+        file.seek(0)
+        raw_bytes = file.read()
+
+        filename = f"reels/{request.user.id}_{uuid.uuid4().hex}{ext}"
+        saved_name = default_storage.save(filename, ContentFile(raw_bytes))
+        url = default_storage.url(saved_name)
+
+        # Ensure absolute URL
+        if not url.startswith('http'):
+            url = request.build_absolute_uri(url)
+
         return Response({'url': url}, status=201)
     except Exception as e:
         import traceback
