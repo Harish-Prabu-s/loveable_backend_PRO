@@ -63,8 +63,8 @@ def _serialize_audio(post, request):
         return {
             'id': music_track.provider_track_id or getattr(music_track, 'id', ''),
             'title': music_track.title,
-            'artist': getattr(music_track, 'artist_name', ''),
-            'file_url': getattr(music_track, 'preview_url', None) or (get_absolute_media_url(music_track.audio_url, request) if getattr(music_track, 'audio_url', None) else ''),
+            'artist': music_track.artist,
+            'file_url': music_track.preview_url or music_track.stream_url,
             'cover_image_url': music_track.cover_image_url,
             'audio_start_sec': post.audio_start_sec,
             'source': music_track.provider_name
@@ -91,7 +91,14 @@ def _serialize_audio(post, request):
 def feed_view(request):
     search = request.GET.get('search')
     category = request.GET.get('category')
-    posts = get_feed(request.user, search=search, category=category)
+    seed_time = request.GET.get('seed_time')
+    try:
+        page = int(request.GET.get('page', 1))
+        limit = int(request.GET.get('limit', 10))
+    except ValueError:
+        page, limit = 1, 10
+        
+    posts = get_feed(request.user, search=search, category=category, seed_time=seed_time, page=page, limit=limit)
     data = [_serialize_post(p, request.user, request) for p in posts]
     return Response(data)
 
@@ -201,6 +208,7 @@ def create_post_view(request):
         
         if hashtags:
             # Merge hashtags into caption or just sync them
+            from ..hashtags.controllers import sync_hashtags
             full_text = caption + " " + " ".join([f"#{h.lstrip('#')}" for h in hashtags])
             sync_hashtags(full_text, post)
         else:

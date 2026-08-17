@@ -1,9 +1,10 @@
 from ...models import Reel, ReelLike, ReelComment, User, Message
 from ..chat.services import get_or_create_room
 
+import dateutil.parser
 from django.db import models
 
-def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False, search: str = None):
+def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False, search: str = None, seed_time: str = None, trending: bool = False):
     offset = (page - 1) * limit
     from django.db.models import Count, F
     
@@ -22,12 +23,27 @@ def list_reels(user, limit: int = 10, page: int = 1, random_flag: bool = False, 
         else:
             qs = qs.filter(models.Q(caption__icontains=search) | models.Q(hashtags__name__icontains=search))
 
+    if seed_time:
+        try:
+            dt = dateutil.parser.isoparse(seed_time)
+            qs = qs.filter(created_at__lte=dt)
+        except (ValueError, TypeError):
+            pass
+
     qs = qs.annotate(
         lcount=Count('likes', distinct=True),
         ccount=Count('comments', distinct=True)
     ).annotate(
         popularity_score=(F('lcount') * 2) + (F('ccount') * 5)
-    ).order_by('-popularity_score', '-created_at').distinct()[offset:offset+limit]
+    )
+    
+    if trending:
+        qs = qs.order_by('-popularity_score', '-created_at').distinct()[offset:offset+limit]
+    else:
+        if seed_time:
+            qs = qs.order_by('-created_at').distinct()[offset:offset+limit]
+        else:
+            qs = qs.order_by('-popularity_score', '-created_at').distinct()[offset:offset+limit]
     
     qs = list(qs)
     
@@ -79,8 +95,8 @@ def create_reel(user, video_url: str, caption: str = '', visibility='all', menti
                 from ...models import Audio
                 title = audio_meta.get('title', 'Original Audio')
                 artist = audio_meta.get('artist', 'Unknown')
-                cover_url = audio_meta.get('cover_image_url', '') or audio_meta.get('coverArt', '')
-                ext_url = audio_meta.get('file_url', '') or audio_meta.get('url', '')
+                cover_url = audio_meta.get('coverArt', '')
+                ext_url = audio_meta.get('url', '')
                 
                 audio = Audio.objects.filter(title=title, artist=artist).first()
                 created = False
@@ -122,22 +138,16 @@ def toggle_reel_like(reel_id: int, user: User):
         like, created = ReelLike.objects.get_or_create(reel=reel, user=user)
         if not created:
             like.delete()
-            # Recalculate engagement after unlike
-            try:
-                from api.modules.feed.engagement import recalculate_reel_score
-                recalculate_reel_score(reel)
-            except Exception:
-                pass
             return {'liked': False, 'likes_count': reel.likes.count()}
-
+        
         # Notify owner
         if reel.user != user:
             from ..notifications.services import create_notification
             from ..notifications.push_service import send_push_notification, _get_user_tokens
-
+            
             profile = getattr(user, 'profile', None)
             sender_name = profile.display_name if profile else user.username
-
+            
             create_notification(
                 recipient=reel.user,
                 actor=user,
@@ -145,7 +155,7 @@ def toggle_reel_like(reel_id: int, user: User):
                 message=f"{sender_name} liked your reel!",
                 object_id=reel.id
             )
-
+            
             tokens = _get_user_tokens(reel.user_id)
             if tokens:
                 send_push_notification(
@@ -154,13 +164,6 @@ def toggle_reel_like(reel_id: int, user: User):
                     body=f"{sender_name} liked your reel!",
                     data={'type': 'reel_like', 'reel_id': reel.id}
                 )
-
-        # Recalculate engagement after like
-        try:
-            from api.modules.feed.engagement import recalculate_reel_score
-            recalculate_reel_score(reel)
-        except Exception:
-            pass
 
         return {'liked': True, 'likes_count': reel.likes.count(), 'reel': reel}
     except Reel.DoesNotExist:
@@ -215,13 +218,6 @@ def share_reel_to_chat(reel_id: int, sender: User, target_user_id: int):
             )
         except Exception as e:
             print(f"Error awarding coins for sharing reel: {e}")
-
-        # Increment share count & recalculate engagement score
-        try:
-            from api.modules.feed.engagement import increment_reel_share
-            increment_reel_share(reel.id)
-        except Exception:
-            pass
 
         return {'success': True, 'target_user': target_user, 'reel': reel}
     except (Reel.DoesNotExist, User.DoesNotExist):

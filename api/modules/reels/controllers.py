@@ -14,6 +14,8 @@ from django.conf import settings
 from ...utils import strip_base_url
 import uuid
 import os
+from .compression import compress_reel_video
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -26,8 +28,10 @@ def list_reels_view(request):
         
     random_flag = request.GET.get('random', 'false').lower() == 'true'
     search = request.GET.get('search')
+    seed_time = request.GET.get('seed_time')
+    trending = request.GET.get('trending', 'false').lower() == 'true'
     
-    qs = list_reels(user=request.user, limit=limit, page=page, random_flag=random_flag, search=search)
+    qs = list_reels(user=request.user, limit=limit, page=page, random_flag=random_flag, search=search, seed_time=seed_time, trending=trending)
     return Response(ReelSerializer(qs, many=True, context={'request': request}).data)
 
 
@@ -67,42 +71,24 @@ def upload_reel_media_view(request):
     try:
         if 'media' not in request.FILES:
             return Response({'error': 'media file required'}, status=400)
-
+        
         file = request.FILES['media']
-        filename_lower = (file.name or '').lower()
-
-        # Determine extension from filename (most reliable source on mobile uploads)
-        if filename_lower.endswith('.mov'):
-            ext = '.mov'
-        elif filename_lower.endswith('.avi'):
-            ext = '.avi'
-        elif filename_lower.endswith('.mkv'):
-            ext = '.mkv'
-        elif filename_lower.endswith('.webm'):
-            ext = '.webm'
-        else:
-            ext = '.mp4'  # Default for all video uploads
-
-        # Save directly to S3 — skip FFmpeg compression entirely.
-        # Mobile cameras already produce H.264/H.265 video — no server-side re-encoding needed.
-        from django.core.files.storage import default_storage
-        from django.core.files.base import ContentFile
-
-        file.seek(0)
-        raw_bytes = file.read()
-
-        filename = f"reels/{request.user.id}_{uuid.uuid4().hex}{ext}"
-        saved_name = default_storage.save(filename, ContentFile(raw_bytes))
-        url = default_storage.url(saved_name)
-
-        # Ensure absolute URL
-        if not url.startswith('http'):
-            url = request.build_absolute_uri(url)
-
+        fs = FileSystemStorage(location=settings.MEDIA_ROOT / 'reels', base_url=settings.MEDIA_URL + 'reels/')
+        
+        ext = os.path.splitext(file.name)[1].lower() or '.mp4'
+        
+        # Apply tiered compression if the file is a video
+        if ext in ['.mp4', '.mov', '.avi', '.mkv', '.hevc', '.m4v']:
+            file, was_compressed = compress_reel_video(file)
+            if was_compressed:
+                ext = '.mp4' # ffmpeg compression always outputs .mp4
+                
+        safe_filename = f"{request.user.id}_{uuid.uuid4().hex}{ext}"
+        
+        filename = fs.save(safe_filename, file)
+        url = request.build_absolute_uri(fs.url(filename))
         return Response({'url': url}, status=201)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return Response({'error': str(e)}, status=500)
 
 @api_view(['POST'])
@@ -111,18 +97,18 @@ def upload_reel_media_view(request):
 def create_reel_view(request):
     try:
         import json
-
+        
         video_url = request.data.get('video_url')
         caption = request.data.get('caption', '')
         visibility = request.data.get('visibility', 'all')
-
+        
         mentions = request.data.get('mentions', [])
         if isinstance(mentions, str):
             try:
                 mentions = json.loads(mentions)
             except:
                 mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
-
+                
         audio_id = request.data.get('audio_id')
         audio_start_sec = request.data.get('audio_start_sec', 0)
         audio_meta = request.data.get('audio_meta')
@@ -131,39 +117,39 @@ def create_reel_view(request):
                 audio_meta = json.loads(audio_meta)
             except:
                 pass
-
+                
         # Cover image is OPTIONAL
         cover_image = request.FILES.get('cover_image')
-
+                
         editor_metadata = request.data.get('editor_metadata')
         if isinstance(editor_metadata, str):
             try:
                 editor_metadata = json.loads(editor_metadata)
             except:
                 editor_metadata = {}
-        # Always ensure it's a dict (never None or a raw string)
         if not isinstance(editor_metadata, dict):
             editor_metadata = {}
 
         relative_video_path = strip_base_url(video_url) if video_url else ''
         reel = create_reel(
-            request.user, relative_video_path, caption, visibility,
-            mentions=mentions, audio_id=audio_id, audio_meta=audio_meta,
+            request.user, relative_video_path, caption, visibility, 
+            mentions=mentions, audio_id=audio_id, audio_meta=audio_meta, 
             audio_start_sec=audio_start_sec, cover_image=cover_image,
             editor_metadata=editor_metadata,
             provider_track_id=request.data.get('provider_track_id'),
             provider_name=request.data.get('provider_name', 'jiosaavn')
         )
-
+        
+        # Handle explicit hashtags if provided, otherwise parse from caption
         hashtags = request.data.get('hashtags', [])
         if isinstance(hashtags, str):
             try:
                 hashtags = json.loads(hashtags)
             except:
                 hashtags = [h.strip() for h in hashtags.split(',') if h.strip()]
-
+        
         if hashtags:
-            full_text = caption + ' ' + ' '.join([f"#{h.lstrip('#')}" for h in hashtags])
+            full_text = caption + " " + " ".join([f"#{h.lstrip('#')}" for h in hashtags])
             sync_hashtags(full_text, reel)
         else:
             sync_hashtags(caption, reel)

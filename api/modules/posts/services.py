@@ -5,8 +5,11 @@ from django.core.files.base import ContentFile
 
 from django.db import models
 
-def get_feed(user, search: str = None, category: str = None):
+import dateutil.parser
+
+def get_feed(user, search: str = None, category: str = None, seed_time: str = None, page: int = 1, limit: int = 10):
     """Return all posts optimized with counts and like status."""
+    offset = (page - 1) * limit
     from django.db.models import Count, Exists, OuterRef, F, Q
     
     # Subquery to check if current user liked the post
@@ -29,6 +32,13 @@ def get_feed(user, search: str = None, category: str = None):
         )
     )
 
+    if seed_time:
+        try:
+            dt = dateutil.parser.isoparse(seed_time)
+            qs = qs.filter(created_at__lte=dt)
+        except (ValueError, TypeError):
+            pass
+
     if category == 'Following':
         qs = qs.filter(user__followers__follower=user)
     elif category == 'Trending':
@@ -48,7 +58,7 @@ def get_feed(user, search: str = None, category: str = None):
     if category != 'Trending':
         qs = qs.order_by('-created_at')
 
-    return qs.distinct()[:50]
+    return qs.distinct()[offset:offset+limit]
 
 
 import base64
@@ -58,6 +68,7 @@ import uuid
 def create_post(user, caption: str, image=None, cover_image=None, visibility='all', mentions=None, additional_images=None, audio_id=None, audio_meta=None, audio_start_sec=0, editor_metadata=None, provider_track_id=None, provider_name='jiosaavn'):
     """Create and return a new post, optionally saving an uploaded image file and processing mentions."""
     from ...models import PostImage, Audio
+    from ..audio.services import MusicService # Ensure this exists or use relative import
     from api.services.music_service import MusicService
     
     post = Post(user=user, caption=caption, visibility=visibility)
@@ -114,8 +125,8 @@ def create_post(user, caption: str, image=None, cover_image=None, visibility='al
             try:
                 title = audio_meta.get('title', 'Original Audio')
                 artist = audio_meta.get('artist', 'Unknown')
-                cover_url = audio_meta.get('cover_image_url', '') or audio_meta.get('coverArt', '')
-                ext_url = audio_meta.get('file_url', '') or audio_meta.get('url', '')
+                cover_url = audio_meta.get('coverArt', '')
+                ext_url = audio_meta.get('url', '')
                 
                 audio = Audio.objects.filter(title=title, artist=artist).first()
                 created = False
@@ -188,14 +199,6 @@ def toggle_like(post_id: int, user):
                 send_push_notification(tokens, title="New Like!", body=f"{sender_name} liked your post!", data={'type': 'post_like', 'post_id': post.id})
 
     likes_count = PostLike.objects.filter(post=post).count()
-
-    # Recalculate engagement score for feed algorithm
-    try:
-        from api.modules.feed.engagement import recalculate_post_score
-        recalculate_post_score(post)
-    except Exception:
-        pass
-
     return {'is_liked': is_liked, 'likes_count': likes_count}
 
 def add_comment(post_id: int, user, text: str, reply_to_id: int = None):
@@ -282,8 +285,7 @@ def share_post(post_id: int, user, target_user_id: int, request=None):
         room = get_or_create_room(user, target_user.id, 'audio')
         
         # Create Message for sharing
-        # Use relative path to avoid 'Data too long' errors for presigned S3 URLs
-        msg_media_url = post.image.name if post.image else None
+        msg_media_url = get_absolute_media_url(post.image, request)
         Message.objects.create(
             room=room,
             sender=user,
@@ -304,7 +306,6 @@ def share_post(post_id: int, user, target_user_id: int, request=None):
             object_id=post.id
         )
 
-        tokens = _get_user_tokens(target_user.id)
         if tokens:
             send_push_notification(
                 tokens, 
@@ -328,13 +329,6 @@ def share_post(post_id: int, user, target_user_id: int, request=None):
             )
         except Exception as e:
             print(f"Error awarding coins for sharing post: {e}")
-
-        # Increment share count & recalculate engagement score
-        try:
-            from api.modules.feed.engagement import increment_post_share
-            increment_post_share(post.id)
-        except Exception:
-            pass
 
         return True
     except (Post.DoesNotExist, User.DoesNotExist):
