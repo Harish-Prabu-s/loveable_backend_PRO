@@ -95,65 +95,73 @@ def upload_reel_media_view(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
 def create_reel_view(request):
-    video_url = request.data.get('video_url')
-    caption = request.data.get('caption', '')
-    visibility = request.data.get('visibility', 'all')
-    mentions = request.data.get('mentions', [])
-    if isinstance(mentions, str):
-        try:
-            import json
-            mentions = json.loads(mentions)
-        except:
-            mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
-            
-    audio_id = request.data.get('audio_id')
-    audio_start_sec = request.data.get('audio_start_sec', 0)
-    audio_meta = request.data.get('audio_meta')
-    if isinstance(audio_meta, str):
-        try:
-            import json
-            audio_meta = json.loads(audio_meta)
-        except:
-            pass
-            
-    cover_image = request.FILES.get('cover_image')
-            
-    editor_metadata = request.data.get('editor_metadata')
-    if isinstance(editor_metadata, str):
-        try:
-            import json
-            editor_metadata = json.loads(editor_metadata)
-        except:
-            pass
+    try:
+        import json
 
-    relative_video_path = strip_base_url(video_url) if video_url else ''
-    reel = create_reel(
-        request.user, relative_video_path, caption, visibility, 
-        mentions=mentions, audio_id=audio_id, audio_meta=audio_meta, 
-        audio_start_sec=audio_start_sec, cover_image=cover_image,
-        editor_metadata=editor_metadata,
-        provider_track_id=request.data.get('provider_track_id'),
-        provider_name=request.data.get('provider_name', 'jiosaavn')
-    )
-    
-    # Handle explicit hashtags if provided, otherwise parse from caption
-    hashtags = request.data.get('hashtags', [])
-    if isinstance(hashtags, str):
-        try:
-            import json
-            hashtags = json.loads(hashtags)
-        except:
-            hashtags = [h.strip() for h in hashtags.split(',') if h.strip()]
-    
-    if hashtags:
-        # Merge hashtags into caption or just sync them
-        full_text = caption + " " + " ".join([f"#{h.lstrip('#')}" for h in hashtags])
-        sync_hashtags(full_text, reel)
-    else:
-        sync_hashtags(caption, reel)
+        video_url = request.data.get('video_url')
+        caption = request.data.get('caption', '')
+        visibility = request.data.get('visibility', 'all')
 
-    return Response(ReelSerializer(reel, context={'request': request}).data, status=201)
+        mentions = request.data.get('mentions', [])
+        if isinstance(mentions, str):
+            try:
+                mentions = json.loads(mentions)
+            except:
+                mentions = [int(m) for m in mentions.split(',') if m.isdigit()]
+
+        audio_id = request.data.get('audio_id')
+        audio_start_sec = request.data.get('audio_start_sec', 0)
+        audio_meta = request.data.get('audio_meta')
+        if isinstance(audio_meta, str):
+            try:
+                audio_meta = json.loads(audio_meta)
+            except:
+                pass
+
+        # Cover image is OPTIONAL
+        cover_image = request.FILES.get('cover_image')
+
+        editor_metadata = request.data.get('editor_metadata')
+        if isinstance(editor_metadata, str):
+            try:
+                editor_metadata = json.loads(editor_metadata)
+            except:
+                editor_metadata = {}
+        # Always ensure it's a dict (never None or a raw string)
+        if not isinstance(editor_metadata, dict):
+            editor_metadata = {}
+
+        relative_video_path = strip_base_url(video_url) if video_url else ''
+        reel = create_reel(
+            request.user, relative_video_path, caption, visibility,
+            mentions=mentions, audio_id=audio_id, audio_meta=audio_meta,
+            audio_start_sec=audio_start_sec, cover_image=cover_image,
+            editor_metadata=editor_metadata,
+            provider_track_id=request.data.get('provider_track_id'),
+            provider_name=request.data.get('provider_name', 'jiosaavn')
+        )
+
+        hashtags = request.data.get('hashtags', [])
+        if isinstance(hashtags, str):
+            try:
+                hashtags = json.loads(hashtags)
+            except:
+                hashtags = [h.strip() for h in hashtags.split(',') if h.strip()]
+
+        if hashtags:
+            full_text = caption + ' ' + ' '.join([f"#{h.lstrip('#')}" for h in hashtags])
+            sync_hashtags(full_text, reel)
+        else:
+            sync_hashtags(caption, reel)
+
+        return Response(ReelSerializer(reel, context={'request': request}).data, status=201)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({'error': str(e)}, status=500)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
