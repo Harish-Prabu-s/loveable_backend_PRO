@@ -75,7 +75,8 @@ def upload_reel_media_view(request):
         file = request.FILES['media']
         fs = FileSystemStorage(location=settings.MEDIA_ROOT / 'reels', base_url=settings.MEDIA_URL + 'reels/')
         
-        ext = os.path.splitext(file.name)[1].lower() or '.mp4'
+        file_name = getattr(file, 'name', 'video.mp4') or 'video.mp4'
+        ext = os.path.splitext(file_name)[1].lower() or '.mp4'
         
         # Apply tiered compression if the file is a video
         if ext in ['.mp4', '.mov', '.avi', '.mkv', '.hevc', '.m4v']:
