@@ -1058,6 +1058,6 @@ class LyricBookmark(models.Model):
 
 # ── Recommendation Engine Models ─────────────────────────────────────────────
 from api.modules.rec_events.models import RecEvent, SessionLog
-from api.modules.ranking.models import ContentScore, RankerModelMetrics
+from api.modules.ranking.models import ContentScore
 from api.modules.feature_store.models import UserInterestProfile
 from api.modules.embeddings.models import ContentEmbedding
