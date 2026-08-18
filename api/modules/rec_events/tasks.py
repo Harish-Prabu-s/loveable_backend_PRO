@@ -24,6 +24,8 @@ from django.conf import settings
 from django.db import IntegrityError
 from django.utils import timezone
 
+from .abuse_filter import is_event_suspicious
+
 logger = logging.getLogger(__name__)
 
 # Redis Stream constants
@@ -129,6 +131,20 @@ def consume_event_stream():
     for stream_name, entries in messages:
         for msg_id, fields in entries:
             try:
+                # Basic validation: ensure no None values
+                if not fields.get('user_id') or not fields.get('content_id'):
+                    logger.warning(f"Event {msg_id} missing user_id or content_id. Skipping.")
+                    ack_ids.append(msg_id)
+                    processed += 1
+                    continue
+                
+                # Check for abuse/spam
+                if is_event_suspicious(int(fields['user_id']), fields.get('event_type'), timezone.now()):
+                    logger.warning(f"Abuse filter triggered for user {fields['user_id']} event {fields.get('event_type')}. Dropping.")
+                    ack_ids.append(msg_id)
+                    processed += 1
+                    continue
+
                 parsed = _parse_stream_event(fields)
 
                 RecEvent.objects.create(
@@ -195,3 +211,46 @@ def consume_event_stream_continuous(max_iterations=100):
         f'total_processed={total_processed}, total_errors={total_errors}'
     )
     return {'total_processed': total_processed, 'total_errors': total_errors}
+
+@shared_task(name='api.modules.rec_events.tasks._flush_session')
+def _flush_session(user_id: int, session_id: str):
+    """
+    Called when a session expires. Aggregates the events for that session
+    and saves them to the SessionLog table.
+    """
+    from .models import RecEvent, SessionLog
+    from django.db.models import Count, Avg, Q
+
+    events = RecEvent.objects.filter(user_id=user_id, session_id=session_id)
+    if not events.exists():
+        return
+        
+    start_time = events.earliest('timestamp').timestamp
+    end_time = events.latest('timestamp').timestamp
+    total = events.count()
+    
+    # Calculate metrics
+    stats = events.aggregate(
+        avg_watch=Avg('watch_pct', filter=Q(event_type__in=['watch', 'replay'])),
+        skips=Count('event_id', filter=Q(event_type='skip')),
+        not_interested=Count('event_id', filter=Q(event_type='not_interested'))
+    )
+    
+    skip_rate = stats['skips'] / total if total > 0 else 0
+    
+    # Simple satisfaction heuristic for the session
+    # Higher is better
+    satisfaction = (stats['avg_watch'] or 0) * 10 - (skip_rate * 5) - (stats['not_interested'] * 10)
+    
+    SessionLog.objects.create(
+        session_id=session_id,
+        user_id=user_id,
+        start_time=start_time,
+        end_time=end_time,
+        total_events=total,
+        avg_watch_pct=stats['avg_watch'] or 0.0,
+        skip_rate=skip_rate,
+        not_interested_count=stats['not_interested'],
+        satisfaction_score=satisfaction
+    )
+    logger.info(f"Flushed session {session_id} for user {user_id}")

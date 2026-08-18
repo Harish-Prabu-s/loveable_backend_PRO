@@ -186,6 +186,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'api.modules.embeddings.tasks.rebuild_faiss_index',
         'schedule': 900,  # every 15 minutes
     },
+    # Phase 4, Task 15: Purge old events for privacy compliance
+    'purge-old-events': {
+        'task': 'api.modules.rec_privacy.tasks.purge_old_events',
+        'schedule': 86400,  # once a day (24 * 60 * 60 seconds)
+    },
 }
 
 DATABASES = {

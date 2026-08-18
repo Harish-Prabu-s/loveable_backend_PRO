@@ -18,6 +18,8 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 from .services import compute_popularity_score, compute_cf_scores
+from .deep_ranker import ranker
+from .diversity import apply_mmr
 
 logger = logging.getLogger(__name__)
 
@@ -220,15 +222,45 @@ def rebuild_user_feeds():
                 # Base rank score: 200 for 1st, 1 for 200th
                 base_rank_score = 200 - top_content.index(content_id) 
                 
-                # Final score: 70% personalization, 30% global popularity
-                final_score = (0.7 * p_score * 100) + (0.3 * base_rank_score)
+                # Base heuristic score: 70% personalization, 30% global popularity
+                heuristic_score = (0.7 * p_score * 100) + (0.3 * base_rank_score)
+                
+                # Apply Phase 3: Deep Ranker + Satisfaction predictor
+                final_score = ranker.score_candidate(
+                    user_features={'profile': profile}, 
+                    content_features=meta, 
+                    base_score=heuristic_score
+                )
                 
                 scored_candidates.append((final_score, meta))
 
             # 4. Sort by final score
             scored_candidates.sort(key=lambda x: x[0], reverse=True)
             
-            feed_items = [item[1] for item in scored_candidates[:FEED_SIZE]]
+            # 5. Apply Phase 3: MMR Diversity and fatigue limits
+            feed_items = apply_mmr(scored_candidates, lambda_param=0.3, max_consecutive_creator=2)
+            
+            # Trim to feed size
+            feed_items = feed_items[:FEED_SIZE]
+            
+            # 6. Apply Phase 4: Bandit Exploration Slots (Task 12)
+            # Replace 2 items with random/new exploration items if available
+            import random
+            exploration_pool = [c for c in top_content if c not in seen_content_ids and content_meta.get(c) not in feed_items]
+            if len(exploration_pool) >= 2 and len(feed_items) > 5:
+                # Pick 2 items for exploration
+                exp_items = random.sample(exploration_pool, 2)
+                # Tag them so the client/events know they are exploration
+                for idx, exp_id in enumerate(exp_items):
+                    meta = content_meta.get(exp_id)
+                    if meta:
+                        meta['is_exploration'] = True
+                        # Insert at positions 3 and 7 (roughly)
+                        insert_pos = 3 if idx == 0 else min(7, len(feed_items))
+                        feed_items.insert(insert_pos, meta)
+                
+                # Trim back down to exact FEED_SIZE if we went over
+                feed_items = feed_items[:FEED_SIZE]
 
             # If not enough unseen content, pad with top content (allow re-shows)
             if len(feed_items) < FEED_SIZE:

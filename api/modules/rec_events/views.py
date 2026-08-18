@@ -75,6 +75,18 @@ class EventIngestView(APIView):
             )
 
         validated = serializer.validated_data
+        
+        # ── Phase 3: Session Boundary Detector ──
+        from .session_detector import get_or_create_session
+        client_session = str(validated.get('session_id') or '')
+        # If client provided one, use it, but still touch the cache to keep it alive
+        # Otherwise, assign one automatically
+        session_id = get_or_create_session(
+            request.user.id, 
+            event_timestamp=validated['timestamp']
+        )
+        if client_session:
+            session_id = client_session
 
         # Build the stream message — all values must be strings for Redis Streams
         stream_message = {
@@ -84,7 +96,7 @@ class EventIngestView(APIView):
             'creator_id': str(validated.get('creator_id') or ''),
             'event_type': validated['event_type'],
             'watch_pct': str(validated.get('watch_pct', 0.0)),
-            'session_id': str(validated.get('session_id') or ''),
+            'session_id': session_id,
             'timestamp': validated['timestamp'].isoformat(),
             'source': validated.get('source', 'feed'),
             'device_context': json.dumps(validated.get('device_context', {})),
@@ -154,7 +166,17 @@ class EventBatchIngestView(APIView):
         try:
             r = _get_stream_redis()
             pipe = r.pipeline()
+            from .session_detector import get_or_create_session
+            
             for validated in validated_events:
+                client_session = str(validated.get('session_id') or '')
+                session_id = get_or_create_session(
+                    request.user.id, 
+                    event_timestamp=validated['timestamp']
+                )
+                if client_session:
+                    session_id = client_session
+                    
                 stream_message = {
                     'event_id': str(validated['event_id']),
                     'user_id': str(request.user.id),
@@ -162,7 +184,7 @@ class EventBatchIngestView(APIView):
                     'creator_id': str(validated.get('creator_id') or ''),
                     'event_type': validated['event_type'],
                     'watch_pct': str(validated.get('watch_pct', 0.0)),
-                    'session_id': str(validated.get('session_id') or ''),
+                    'session_id': session_id,
                     'timestamp': validated['timestamp'].isoformat(),
                     'source': validated.get('source', 'feed'),
                     'device_context': json.dumps(validated.get('device_context', {})),

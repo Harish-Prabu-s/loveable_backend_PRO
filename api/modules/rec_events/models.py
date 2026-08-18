@@ -109,3 +109,30 @@ class RecEvent(models.Model):
 
     def __str__(self):
         return f'{self.event_type} by user {self.user_id} on content {self.content_id}'
+
+
+class SessionLog(models.Model):
+    """
+    Aggregated metrics for a single user session.
+    A session is bounded by 30 minutes of inactivity.
+    """
+    session_id = models.UUIDField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='session_logs')
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    
+    total_events = models.IntegerField(default=0)
+    avg_watch_pct = models.FloatField(default=0.0)
+    skip_rate = models.FloatField(default=0.0)
+    not_interested_count = models.IntegerField(default=0)
+    
+    # Pre-computed satisfaction for this session for analytics
+    satisfaction_score = models.FloatField(default=0.0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', '-start_time']),
+        ]
+        ordering = ['-start_time']
