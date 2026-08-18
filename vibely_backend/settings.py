@@ -171,6 +171,21 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'api.modules.ranking.tasks.rebuild_user_feeds',
         'schedule': 300,  # every 5 minutes
     },
+    # Phase 2, Task 4: Sync feature store every 10 minutes
+    'sync-user-features': {
+        'task': 'api.modules.feature_store.tasks.sync_user_features',
+        'schedule': 600,  # every 10 minutes
+    },
+    # Phase 2, Task 5: Generate embeddings for new content
+    'generate-content-embeddings': {
+        'task': 'api.modules.embeddings.tasks.generate_content_embeddings',
+        'schedule': 300,  # every 5 minutes
+    },
+    # Phase 2, Task 5: Rebuild FAISS index
+    'rebuild-faiss-index': {
+        'task': 'api.modules.embeddings.tasks.rebuild_faiss_index',
+        'schedule': 900,  # every 15 minutes
+    },
 }
 
 DATABASES = {

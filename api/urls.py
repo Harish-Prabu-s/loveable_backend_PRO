@@ -41,6 +41,7 @@ urlpatterns = [
     # ── Recommendation Engine ───────────────────────────────────────────────
     path('rec/', include('api.modules.rec_events.urls')),
     path('rec/', include('api.modules.rec_feed.urls')),
+    path('rec/', include('api.modules.rec_feedback.urls')),
 
 
     # Legacy endpoints remain accessible if needed

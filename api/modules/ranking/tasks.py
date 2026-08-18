@@ -149,6 +149,8 @@ def rebuild_user_feeds():
     # Build a lookup dict for content metadata
     content_meta = {}
     for reel in reels:
+        # Get tags for topic matching
+        tags = [t.name.lower() for t in reel.hashtags.all()] if hasattr(reel, 'hashtags') else []
         content_meta[reel['id']] = {
             'content_id': reel['id'],
             'type': 'reel',
@@ -158,6 +160,7 @@ def rebuild_user_feeds():
             'engagement_score': reel['engagement_score'],
             'view_count': reel['view_count'],
             'share_count': reel['share_count'],
+            'tags': tags,
         }
 
     # Get per-user event history for basic personalization filtering
@@ -166,7 +169,7 @@ def rebuild_user_feeds():
 
     for user_id in active_user_ids:
         try:
-            # Get content this user has already seen / interacted with
+            # 1. Get seen content
             seen_content_ids = set(
                 RecEvent.objects.filter(
                     user_id=user_id,
@@ -175,16 +178,57 @@ def rebuild_user_feeds():
                 ).values_list('content_id', flat=True)
             )
 
-            # Filter out seen content and build the feed
-            feed_items = []
+            # 2. Fetch User Interest Profile from Redis
+            profile_json = r.get(f'profile:{user_id}')
+            profile = json.loads(profile_json) if profile_json else {}
+            
+            long_term = profile.get('long_term', {})
+            short_term = profile.get('short_term', {})
+            session = profile.get('session', {})
+            negative = profile.get('negative_confidence', {})
+
+            # 3. Score candidates
+            scored_candidates = []
             for content_id in top_content:
                 if content_id in seen_content_ids:
                     continue
+                
                 meta = content_meta.get(content_id)
-                if meta:
-                    feed_items.append(meta)
-                if len(feed_items) >= FEED_SIZE:
-                    break
+                if not meta:
+                    continue
+                    
+                # Calculate Personalization Score based on Topic overlap
+                p_score = 0.0
+                tags = meta.get('tags', [])
+                for tag in tags:
+                    # Session intent is weighted highest (0.5), then short (0.3), then long (0.2)
+                    topic_score = (
+                        0.5 * session.get(tag, 0.0) +
+                        0.3 * short_term.get(tag, 0.0) +
+                        0.2 * long_term.get(tag, 0.0)
+                    )
+                    
+                    # Heavy penalty for negative topics
+                    if tag in negative:
+                        topic_score -= negative[tag] * 2.0
+                        
+                    p_score += topic_score
+                
+                # We could get the base combined_score from ContentScore here,
+                # but for simplicity we rely on the fact that top_content is already 
+                # ordered by combined_score. So we blend their rank with the p_score.
+                # Base rank score: 200 for 1st, 1 for 200th
+                base_rank_score = 200 - top_content.index(content_id) 
+                
+                # Final score: 70% personalization, 30% global popularity
+                final_score = (0.7 * p_score * 100) + (0.3 * base_rank_score)
+                
+                scored_candidates.append((final_score, meta))
+
+            # 4. Sort by final score
+            scored_candidates.sort(key=lambda x: x[0], reverse=True)
+            
+            feed_items = [item[1] for item in scored_candidates[:FEED_SIZE]]
 
             # If not enough unseen content, pad with top content (allow re-shows)
             if len(feed_items) < FEED_SIZE:
