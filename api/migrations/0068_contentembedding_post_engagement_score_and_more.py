@@ -25,41 +25,6 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
             ],
         ),
-        migrations.AddField(
-            model_name='post',
-            name='engagement_score',
-            field=models.FloatField(db_index=True, default=0.0),
-        ),
-        migrations.AddField(
-            model_name='post',
-            name='share_count',
-            field=models.PositiveIntegerField(default=0),
-        ),
-        migrations.AddField(
-            model_name='post',
-            name='view_count',
-            field=models.PositiveIntegerField(default=0),
-        ),
-        migrations.AddField(
-            model_name='profile',
-            name='last_active',
-            field=models.DateTimeField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='reel',
-            name='engagement_score',
-            field=models.FloatField(db_index=True, default=0.0),
-        ),
-        migrations.AddField(
-            model_name='reel',
-            name='share_count',
-            field=models.PositiveIntegerField(default=0),
-        ),
-        migrations.AddField(
-            model_name='reel',
-            name='view_count',
-            field=models.PositiveIntegerField(default=0),
-        ),
         migrations.AlterField(
             model_name='audio',
             name='file_url',
