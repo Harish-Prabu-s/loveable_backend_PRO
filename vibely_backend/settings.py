@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'rest_framework_simplejwt.token_blacklist',
     'channels',
+    'django_celery_beat',
     'api',
     'storages',
 ]
@@ -132,6 +133,43 @@ CHANNEL_LAYERS = {
             # Cap channel message queue at 100 to prevent memory bloat
             "capacity": 100,
         },
+    },
+}
+
+# ── Celery Configuration ────────────────────────────────────────────────────
+# Channels uses DB 0, Celery broker uses DB 1, Redis Streams use DB 2
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/1')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/1')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30-minute hard limit per task
+
+# Redis Streams URL (DB 2) — used by the event ingestion pipeline
+REDIS_STREAMS_URL = os.environ.get('REDIS_STREAMS_URL', 'redis://localhost:6379/2')
+
+# Redis cache URL (DB 3) — used for feed cache, feature store online mirror
+REDIS_CACHE_URL = os.environ.get('REDIS_CACHE_URL', 'redis://localhost:6379/3')
+
+# Celery Beat schedule — recommendation engine periodic tasks
+# Tasks register themselves here; empty schedules are fine on startup.
+CELERY_BEAT_SCHEDULE = {
+    # Phase 1, Task 1: Consume events from Redis Stream into MySQL every 5s
+    'consume-event-stream': {
+        'task': 'api.modules.rec_events.tasks.consume_event_stream',
+        'schedule': 5,  # every 5 seconds
+    },
+    # Phase 1, Task 2: Recompute popularity + CF scores hourly
+    'recompute-popularity-cf-hourly': {
+        'task': 'api.modules.ranking.tasks.compute_popularity_and_cf',
+        'schedule': 3600,  # every hour
+    },
+    # Phase 1, Task 3: Rebuild per-user feed caches every 5 minutes
+    'rebuild-user-feeds': {
+        'task': 'api.modules.ranking.tasks.rebuild_user_feeds',
+        'schedule': 300,  # every 5 minutes
     },
 }
 

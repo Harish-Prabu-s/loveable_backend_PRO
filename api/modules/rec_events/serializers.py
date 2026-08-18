@@ -1,0 +1,76 @@
+"""
+Event Serializers
+=================
+DRF serializer for ingesting user interaction events.
+
+Validates all fields against the masterplan Section 3 Event schema before
+the event is pushed onto the Redis Stream. Rejects malformed events with
+a 400 at the DRF layer so they never enter the pipeline.
+"""
+
+from rest_framework import serializers
+
+
+class RecEventSerializer(serializers.Serializer):
+    """
+    Validates incoming event payloads.
+
+    This is a plain Serializer (not ModelSerializer) because events go to
+    the Redis Stream first, not directly to MySQL. The Celery consumer
+    handles persistence.
+    """
+
+    VALID_EVENT_TYPES = {
+        'watch', 'replay', 'like', 'save', 'share', 'comment',
+        'follow', 'skip', 'not_interested', 'hide', 'report',
+    }
+    VALID_SOURCES = {'feed', 'search', 'profile', 'explore'}
+
+    event_id = serializers.UUIDField(required=True)
+    content_id = serializers.IntegerField(required=True, min_value=1)
+    creator_id = serializers.IntegerField(required=False, min_value=1, allow_null=True)
+    event_type = serializers.CharField(required=True, max_length=20)
+    watch_pct = serializers.FloatField(required=False, default=0.0)
+    session_id = serializers.UUIDField(required=False, allow_null=True)
+    timestamp = serializers.DateTimeField(required=True)
+    source = serializers.CharField(required=False, default='feed', max_length=20)
+    device_context = serializers.DictField(required=False, default=dict)
+
+    def validate_event_type(self, value):
+        if value not in self.VALID_EVENT_TYPES:
+            raise serializers.ValidationError(
+                f'Invalid event_type "{value}". '
+                f'Must be one of: {", ".join(sorted(self.VALID_EVENT_TYPES))}'
+            )
+        return value
+
+    def validate_watch_pct(self, value):
+        if value < 0.0 or value > 1.0:
+            raise serializers.ValidationError(
+                'watch_pct must be between 0.0 and 1.0.'
+            )
+        return value
+
+    def validate_source(self, value):
+        if value not in self.VALID_SOURCES:
+            raise serializers.ValidationError(
+                f'Invalid source "{value}". '
+                f'Must be one of: {", ".join(sorted(self.VALID_SOURCES))}'
+            )
+        return value
+
+    def validate(self, data):
+        """Cross-field validation."""
+        event_type = data.get('event_type')
+        watch_pct = data.get('watch_pct', 0.0)
+
+        # watch_pct is only meaningful for watch/replay events
+        if event_type in ('watch', 'replay') and watch_pct == 0.0:
+            # Allow 0.0 (user opened but immediately closed), but warn
+            pass
+
+        # Non-watch events should not have a meaningful watch_pct
+        if event_type not in ('watch', 'replay') and watch_pct > 0.0:
+            data['watch_pct'] = 0.0  # Silently zero it out
+
+        return data

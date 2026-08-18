@@ -38,6 +38,10 @@ urlpatterns = [
     path('modern/', include('api.modules.modern.urls')),
     path('feed/', include('api.modules.feed.urls')),
 
+    # ── Recommendation Engine ───────────────────────────────────────────────
+    path('rec/', include('api.modules.rec_events.urls')),
+    path('rec/', include('api.modules.rec_feed.urls')),
+
 
     # Legacy endpoints remain accessible if needed
     path('health/', views.health_check),

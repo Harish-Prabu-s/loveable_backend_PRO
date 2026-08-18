@@ -11,6 +11,26 @@ services:
       - .env
     command: python manage.py runserver 0.0.0.0:8001
 
+  celery-worker:
+    build: .
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    command: celery -A vibely_backend worker -l info --concurrency=4
+    depends_on:
+      - backend
+
+  celery-beat:
+    build: .
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    command: celery -A vibely_backend beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      - backend
+
   turn:
     build:
       context: ./docker/turn
