@@ -29,6 +29,10 @@ python manage.py collectstatic --noinput
 echo "6. Restarting Gunicorn/Systemd Service..."
 sudo systemctl restart loveable-backend.service
 
+echo "7. Restarting Celery Services..."
+sudo systemctl restart loveable-celery.service
+sudo systemctl restart loveable-celery-beat.service
+
 echo "====================================="
 echo " Deployment Completed Successfully!"
 echo "====================================="
