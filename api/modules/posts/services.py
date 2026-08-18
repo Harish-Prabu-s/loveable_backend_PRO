@@ -68,7 +68,6 @@ import uuid
 def create_post(user, caption: str, image=None, cover_image=None, visibility='all', mentions=None, additional_images=None, audio_id=None, audio_meta=None, audio_start_sec=0, editor_metadata=None, provider_track_id=None, provider_name='jiosaavn'):
     """Create and return a new post, optionally saving an uploaded image file and processing mentions."""
     from ...models import PostImage, Audio
-    from ..audio.services import MusicService # Ensure this exists or use relative import
     from api.services.music_service import MusicService
     
     post = Post(user=user, caption=caption, visibility=visibility)
