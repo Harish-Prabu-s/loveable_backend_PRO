@@ -44,11 +44,12 @@ def get_or_create_session(user_id: int, event_timestamp=None) -> str:
         # No active session
         session_id = str(uuid.uuid4())
         
-    # Update last activity
+    # Update last activity. Set timeout to 7 days so we don't lose the session tracking
+    # before we have a chance to flush it on their next visit.
     cache.set(cache_key, {
         'session_id': session_id,
         'last_activity': event_timestamp
-    }, timeout=SESSION_TIMEOUT_MINUTES * 60)
+    }, timeout=86400 * 7)
     
     return session_id
 
