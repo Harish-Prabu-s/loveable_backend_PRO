@@ -118,3 +118,66 @@ class ResetRecommendationsView(APIView):
         except Exception as e:
             logger.error(f"Failed to reset recommendations: {e}")
             return Response({'error': 'Failed to reset'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class InterestsView(APIView):
+    """
+    GET /api/rec/feedback/interests/
+    DELETE /api/rec/feedback/interests/<topic>/
+    
+    Allows users to view and delete their tracked interests.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        from api.modules.feature_store.models import UserInterestProfile
+        try:
+            profile = UserInterestProfile.objects.get(user=request.user)
+            # Combine long_term and short_term
+            interests_dict = profile.long_term or {}
+            
+            # Format for frontend
+            interests = []
+            for topic, weight in interests_dict.items():
+                interests.append({
+                    'id': topic,
+                    'topic': topic.title(),
+                    'weight': weight
+                })
+            
+            # Sort by weight descending
+            interests.sort(key=lambda x: x['weight'], reverse=True)
+            return Response({'interests': interests})
+        except UserInterestProfile.DoesNotExist:
+            return Response({'interests': []})
+            
+    def delete(self, request, topic=None):
+        if not topic:
+            return Response({'error': 'topic required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        from api.modules.feature_store.models import UserInterestProfile
+        try:
+            profile = UserInterestProfile.objects.get(user=request.user)
+            
+            # Remove from all profiles
+            if profile.long_term and topic in profile.long_term:
+                del profile.long_term[topic]
+            if profile.short_term and topic in profile.short_term:
+                del profile.short_term[topic]
+            if profile.session and topic in profile.session:
+                del profile.session[topic]
+                
+            # Add to negative confidence so it doesn't get re-added easily
+            if not profile.negative_confidence:
+                profile.negative_confidence = {}
+            profile.negative_confidence[topic] = 1.0
+            
+            profile.save()
+            
+            # Clear redis cache
+            from api.modules.feature_store.tasks import _get_cache_redis
+            r = _get_cache_redis()
+            r.delete(f"profile:{request.user.id}")
+            
+            return Response({'status': 'interest_removed'})
+        except UserInterestProfile.DoesNotExist:
+            return Response({'status': 'interest_removed'}) # Already doesn't exist
