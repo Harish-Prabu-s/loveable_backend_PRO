@@ -22,6 +22,12 @@ pkill gunicorn
 sleep 2
 nohup /var/www/loveable_backend_PRO/venv/bin/gunicorn vibely_backend.wsgi:application --bind 127.0.0.1:8000 --workers 3 > gunicorn.log 2>&1 &
 
+echo 'Restarting Celery Worker and Beat...' &&
+pkill -f 'celery'
+sleep 2
+nohup /var/www/loveable_backend_PRO/venv/bin/celery -A vibely_backend worker -l info --concurrency=4 > celery_worker.log 2>&1 &
+nohup /var/www/loveable_backend_PRO/venv/bin/celery -A vibely_backend beat -l info > celery_beat.log 2>&1 &
+
 echo 'Deployment Successful!'
 "@
 

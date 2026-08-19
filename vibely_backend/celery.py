@@ -24,8 +24,16 @@ app = Celery('vibely_backend')
 # celery-related settings must be prefixed with CELERY_ in settings.py.
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
-# Auto-discover tasks.py in all installed apps (including api.modules.*)
-app.autodiscover_tasks()
+from django.conf import settings
+
+# Auto-discover tasks.py in all installed apps AND our custom submodules
+app.autodiscover_tasks(lambda: settings.INSTALLED_APPS + [
+    'api.modules.rec_events',
+    'api.modules.ranking',
+    'api.modules.feature_store',
+    'api.modules.embeddings',
+    'api.modules.rec_privacy'
+])
 
 
 @app.task(bind=True, ignore_result=True)
