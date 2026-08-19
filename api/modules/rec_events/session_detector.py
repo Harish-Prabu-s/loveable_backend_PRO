@@ -13,6 +13,7 @@ from django.utils import timezone
 import uuid
 import logging
 from django.core.cache import cache
+from .tasks import _flush_session
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,5 @@ def log_session_end(user_id: int, session_id: str):
     """
     Called when a session formally ends to summarize and log it.
     """
-    from .tasks import _flush_session_task
-    _flush_session_task.delay(user_id, session_id)
+    _flush_session.delay(user_id, session_id)
 
