@@ -73,7 +73,6 @@ def upload_reel_media_view(request):
             return Response({'error': 'media file required'}, status=400)
         
         file = request.FILES['media']
-        fs = FileSystemStorage(location=settings.MEDIA_ROOT / 'reels', base_url=settings.MEDIA_URL + 'reels/')
         
         file_name = getattr(file, 'name', 'video.mp4') or 'video.mp4'
         ext = os.path.splitext(file_name)[1].lower() or '.mp4'
@@ -84,10 +83,18 @@ def upload_reel_media_view(request):
             if was_compressed:
                 ext = '.mp4' # ffmpeg compression always outputs .mp4
                 
-        safe_filename = f"{request.user.id}_{uuid.uuid4().hex}{ext}"
+        safe_filename = f"reels/{request.user.id}_{uuid.uuid4().hex}{ext}"
         
-        filename = fs.save(safe_filename, file)
-        url = request.build_absolute_uri(fs.url(filename))
+        from django.core.files.storage import default_storage
+        filename = default_storage.save(safe_filename, file)
+        
+        try:
+            url = default_storage.url(filename)
+            if not url.startswith('http'):
+                url = request.build_absolute_uri(url)
+        except Exception:
+            url = request.build_absolute_uri(settings.MEDIA_URL + filename)
+            
         return Response({'url': url}, status=201)
     except Exception as e:
         return Response({'error': str(e)}, status=500)
