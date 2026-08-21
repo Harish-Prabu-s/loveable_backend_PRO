@@ -82,6 +82,13 @@ def _parse_stream_event(fields: dict) -> dict:
     else:
         play_session_id = None
 
+    milestones = []
+    if fields.get('milestones'):
+        try:
+            milestones = json.loads(fields['milestones'])
+        except (json.JSONDecodeError, TypeError):
+            milestones = []
+
     return {
         'event_id': uuid.UUID(fields['event_id']),
         'user_id': int(fields['user_id']),
@@ -101,6 +108,7 @@ def _parse_stream_event(fields: dict) -> dict:
         'timestamp': datetime.fromisoformat(fields['timestamp']),
         'source': fields.get('source', 'feed'),
         'device_context': device_context,
+        'milestones': milestones,
     }
 
 
@@ -210,6 +218,7 @@ def consume_event_stream():
                     timestamp=parsed['timestamp'],
                     source=parsed['source'],
                     device_context=parsed['device_context'],
+                    milestones=parsed['milestones'],
                 )
                 
                 # Master Tracking: Idempotent Upsert for UserContentInterest
