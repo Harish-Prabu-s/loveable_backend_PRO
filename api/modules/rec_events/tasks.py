@@ -82,6 +82,15 @@ def _parse_stream_event(fields: dict) -> dict:
     else:
         play_session_id = None
 
+    feed_session_id = fields.get('feed_session_id', '')
+    if feed_session_id:
+        try:
+            feed_session_id = uuid.UUID(feed_session_id)
+        except ValueError:
+            feed_session_id = None
+    else:
+        feed_session_id = None
+
     milestones = []
     if fields.get('milestones'):
         try:
@@ -99,6 +108,7 @@ def _parse_stream_event(fields: dict) -> dict:
         'watch_pct': float(fields.get('watch_pct', 0.0)),
         'session_id': session_id,
         'play_session_id': play_session_id,
+        'feed_session_id': feed_session_id,
         'watch_ms': int(fields['watch_ms']) if fields.get('watch_ms') else None,
         'loop_index': int(fields.get('loop_index', 0)),
         'scroll_direction': fields.get('scroll_direction') or None,
@@ -110,6 +120,110 @@ def _parse_stream_event(fields: dict) -> dict:
         'device_context': device_context,
         'milestones': milestones,
     }
+
+
+def _process_view_session(user_id, content_id, content_type, play_session_id, feed_session_id, ended_at):
+    """
+    Aggregates all RecEvents for a given play_session_id and creates/updates a ReelViewSession.
+    Then updates UserContentInterest with the aggregated counts.
+    """
+    from .models import RecEvent, ReelViewSession, UserContentInterest
+    from django.db.models import F
+
+    # Ensure this isn't processed multiple times for the same play_session_id
+    if ReelViewSession.objects.filter(play_session_id=play_session_id).exists():
+        return
+
+    events = list(RecEvent.objects.filter(
+        user_id=user_id,
+        content_id=content_id,
+        content_type=content_type,
+        play_session_id=play_session_id
+    ).order_by('timestamp'))
+
+    if not events:
+        return
+        
+    started_at = events[0].timestamp
+    max_watch_percent = max([e.watch_pct for e in events] + [0.0])
+    # Dwell ms might be in the last impression_end or watch event
+    total_watch_ms = max([e.watch_ms for e in events if e.watch_ms is not None] + [0])
+    loop_count = max([e.loop_index for e in events] + [0])
+    
+    # Check backward seeks (approximate by looking at progress drops if available, but loop_count serves a similar purpose)
+    backward_seeks = 0 # Future enhancement: compute from milestones/progress drops
+    
+    # Classify outcome
+    session_outcome = 'NORMAL_EXIT'
+    is_meaningful_view = False
+    
+    # First, check for explicit negative events in this session (e.g. skip, not_interested)
+    has_skip_event = any(e.event_type == 'skip' for e in events)
+    
+    if max_watch_percent < 0.15 and total_watch_ms < 3000 and (has_skip_event or loop_count == 0):
+        session_outcome = 'QUICK_SKIP'
+    elif 0.15 <= max_watch_percent < 0.70:
+        session_outcome = 'PARTIAL_SKIP'
+    elif 0.70 <= max_watch_percent < 0.99:
+        session_outcome = 'NORMAL_EXIT'
+        is_meaningful_view = True
+    elif max_watch_percent >= 0.99 or loop_count > 0:
+        session_outcome = 'COMPLETED'
+        is_meaningful_view = True
+
+    # If the user has watched this content before and reached completion
+    uci = UserContentInterest.objects.filter(user_id=user_id, content_id=content_id, content_type=content_type).first()
+    if uci and uci.completed_count > 0 and session_outcome in ['COMPLETED', 'NORMAL_EXIT']:
+        session_outcome = 'REWATCH_EXIT'
+        is_meaningful_view = True
+
+    ReelViewSession.objects.create(
+        user_id=user_id,
+        content_id=content_id,
+        content_type=content_type,
+        play_session_id=play_session_id,
+        feed_session_id=feed_session_id,
+        max_watch_percent=max_watch_percent,
+        total_watch_ms=total_watch_ms,
+        loop_count=loop_count,
+        session_outcome=session_outcome,
+        is_meaningful_view=is_meaningful_view,
+        started_at=started_at,
+        ended_at=ended_at
+    )
+    
+    # Update UserContentInterest
+    obj, created = UserContentInterest.objects.get_or_create(
+        user_id=user_id,
+        content_id=content_id,
+        content_type=content_type,
+        defaults={'first_seen_at': started_at, 'last_seen_at': ended_at}
+    )
+    
+    update_kwargs = {
+        'view_session_count': F('view_session_count') + 1,
+        'total_watch_ms': F('total_watch_ms') + total_watch_ms,
+        'last_watch_percent': max_watch_percent,
+        'last_action': session_outcome,
+        'last_seen_at': ended_at,
+    }
+    
+    if max_watch_percent > obj.max_watch_percent:
+        update_kwargs['max_watch_percent'] = max_watch_percent
+        
+    if is_meaningful_view:
+        update_kwargs['meaningful_view_count'] = F('meaningful_view_count') + 1
+        
+    if session_outcome == 'COMPLETED':
+        update_kwargs['completed_count'] = F('completed_count') + 1
+    elif session_outcome == 'REWATCH_EXIT':
+        update_kwargs['rewatch_count'] = F('rewatch_count') + 1
+    elif session_outcome == 'QUICK_SKIP':
+        update_kwargs['quick_skip_count'] = F('quick_skip_count') + 1
+    elif session_outcome == 'PARTIAL_SKIP':
+        update_kwargs['partial_skip_count'] = F('partial_skip_count') + 1
+        
+    UserContentInterest.objects.filter(id=obj.id).update(**update_kwargs)
 
 
 @shared_task(name='api.modules.rec_events.tasks.consume_event_stream')
@@ -219,63 +333,34 @@ def consume_event_stream():
                     source=parsed['source'],
                     device_context=parsed['device_context'],
                     milestones=parsed['milestones'],
+                    feed_session_id=parsed['feed_session_id'],
                 )
                 
-                # Master Tracking: Idempotent Upsert for UserContentInterest
-                from .models import UserContentInterest
-                from django.db.models import F
-
-                if parsed['event_type'] == 'skip' and parsed['content_id']:
-                    # If skip, just increment skip_count or create as skipped
-                    obj, created = UserContentInterest.objects.get_or_create(
-                        user_id=parsed['user_id'],
-                        content_id=parsed['content_id'],
-                        content_type=parsed['content_type'],
-                        defaults={'status': 'skipped', 'skip_count': 1}
-                    )
-                    if not created:
-                        UserContentInterest.objects.filter(id=obj.id).update(skip_count=F('skip_count') + 1)
-                        
-                elif parsed['event_type'] == 'impression_end' and parsed['content_id']:
-                    # We check if play_session_id is new for this user+content pair
-                    # In a real heavy system we'd use Redis to check if session is new, but here we can query
-                    is_new_session = not RecEvent.objects.filter(
+                # Update UserContentInterest and create ReelViewSession on impression_end
+                if parsed['event_type'] == 'impression_end' and parsed['content_id'] and parsed['play_session_id']:
+                    _process_view_session(
                         user_id=parsed['user_id'],
                         content_id=parsed['content_id'],
                         content_type=parsed['content_type'],
                         play_session_id=parsed['play_session_id'],
-                        event_type='impression_end'
-                    ).exclude(event_id=parsed['event_id']).exists()
-
+                        feed_session_id=parsed['feed_session_id'],
+                        ended_at=parsed['timestamp']
+                    )
+                
+                # Master Tracking: Impression count
+                if parsed['event_type'] == 'impression_start' and parsed['content_id']:
+                    from .models import UserContentInterest
+                    from django.db.models import F
                     obj, created = UserContentInterest.objects.get_or_create(
                         user_id=parsed['user_id'],
                         content_id=parsed['content_id'],
                         content_type=parsed['content_type'],
-                        defaults={
-                            'status': 'watched', 
-                            'best_watch_percent': parsed['watch_pct'],
-                            'session_count': 1,
-                            'replay_count': parsed['loop_index'],
-                            'total_watch_ms': parsed.get('watch_ms') or 0,
-                            'first_watched_at': parsed['timestamp'],
-                            'last_interacted_at': parsed['timestamp']
-                        }
+                        defaults={'impression_count': 1, 'first_seen_at': parsed['timestamp'], 'last_seen_at': parsed['timestamp']}
                     )
-                    
                     if not created:
-                        new_status = obj.status
-                        if is_new_session and obj.best_watch_percent >= 0.70:
-                            new_status = 'rewatched'
-                        elif obj.status == 'skipped':
-                            new_status = 'watched'
-
                         UserContentInterest.objects.filter(id=obj.id).update(
-                            status=new_status,
-                            best_watch_percent=max(obj.best_watch_percent, parsed['watch_pct']),
-                            session_count=F('session_count') + (1 if is_new_session else 0),
-                            replay_count=F('replay_count') + parsed['loop_index'],
-                            total_watch_ms=F('total_watch_ms') + (parsed.get('watch_ms') or 0),
-                            last_interacted_at=parsed['timestamp']
+                            impression_count=F('impression_count') + 1,
+                            last_seen_at=parsed['timestamp']
                         )
 
                 # Populate Redis seen filter (Phase 4.3)

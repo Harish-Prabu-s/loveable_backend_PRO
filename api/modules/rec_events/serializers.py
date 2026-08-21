@@ -45,6 +45,7 @@ class RecEventSerializer(serializers.Serializer):
     watch_pct = serializers.FloatField(required=False, default=0.0)
     session_id = serializers.UUIDField(required=False, allow_null=True)
     play_session_id = serializers.UUIDField(required=False, allow_null=True)
+    feed_session_id = serializers.UUIDField(required=False, allow_null=True)
     timestamp = serializers.DateTimeField(required=True)
     source = serializers.CharField(required=False, default='feed', max_length=20)
     

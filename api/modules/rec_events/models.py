@@ -107,6 +107,10 @@ class RecEvent(models.Model):
         null=True, blank=True, db_index=True,
         help_text='One per continuous engagement with a single reel.',
     )
+    feed_session_id = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        help_text='Links multiple views in one continuous feed scroll.',
+    )
 
     timestamp = models.DateTimeField(db_index=True)
 
@@ -202,36 +206,81 @@ class SessionLog(models.Model):
         return f"Session {self.session_id} for user {self.user_id}"
 
 
+class ReelViewSession(models.Model):
+    """
+    Aggregated viewing session for a single content piece.
+    Created when an impression ends, summarizing all raw events (watch, loop, backward, etc).
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reel_view_sessions')
+    content_id = models.PositiveBigIntegerField(db_index=True)
+    content_type = models.CharField(max_length=20, default='reel', db_index=True)
+    
+    play_session_id = models.UUIDField(unique=True, help_text='Links to raw RecEvents for this viewing session')
+    feed_session_id = models.UUIDField(null=True, blank=True, db_index=True, help_text='Links multiple views in one continuous feed scroll')
+    
+    max_watch_percent = models.FloatField(default=0.0)
+    total_watch_ms = models.PositiveIntegerField(default=0)
+    loop_count = models.PositiveSmallIntegerField(default=0)
+    
+    SESSION_OUTCOMES = (
+        ('QUICK_SKIP', 'Quick Skip (<15%)'),
+        ('PARTIAL_SKIP', 'Partial Skip (15-70%)'),
+        ('NORMAL_EXIT', 'Normal Exit (70-99%)'),
+        ('COMPLETED', 'Completed (>=99%)'),
+        ('REWATCH_EXIT', 'Rewatch Exit'),
+    )
+    session_outcome = models.CharField(max_length=20, choices=SESSION_OUTCOMES)
+    is_meaningful_view = models.BooleanField(default=False, db_index=True)
+    
+    started_at = models.DateTimeField(db_index=True)
+    ended_at = models.DateTimeField()
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'content_type', 'content_id']),
+            models.Index(fields=['feed_session_id', 'started_at']),
+        ]
+        ordering = ['-started_at']
+
+    def __str__(self):
+        return f"View {self.play_session_id} outcome: {self.session_outcome}"
+
+
 class UserContentInterest(models.Model):
     """
     Aggregate tracking model per user+content pair (Master Plan §2.2).
     Provides fast reads for UI badges ('Watched', 'Rewatched') without counting raw events.
     """
-    STATUS_CHOICES = (
-        ('skipped', 'Skipped'),
-        ('watched', 'Watched'),
-        ('rewatched', 'Rewatched'),
-    )
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='content_interests')
     content_id = models.PositiveBigIntegerField(db_index=True)
     content_type = models.CharField(max_length=20, default='reel')
     
-    status = models.CharField(max_length=16, choices=STATUS_CHOICES)
-    best_watch_percent = models.FloatField(default=0.0)
-    total_watch_ms = models.PositiveIntegerField(default=0)
-    session_count = models.PositiveSmallIntegerField(default=0)
-    replay_count = models.PositiveSmallIntegerField(default=0)
-    skip_count = models.PositiveSmallIntegerField(default=0)
+    # Quantitative metrics
+    impression_count = models.PositiveSmallIntegerField(default=0)
+    view_session_count = models.PositiveSmallIntegerField(default=0)
+    meaningful_view_count = models.PositiveSmallIntegerField(default=0)
+    completed_count = models.PositiveSmallIntegerField(default=0)
+    rewatch_count = models.PositiveSmallIntegerField(default=0)
+    quick_skip_count = models.PositiveSmallIntegerField(default=0)
+    partial_skip_count = models.PositiveSmallIntegerField(default=0)
     
-    first_watched_at = models.DateTimeField(null=True, blank=True)
-    last_interacted_at = models.DateTimeField(null=True, blank=True)
+    # Qualitative metrics
+    max_watch_percent = models.FloatField(default=0.0)
+    total_watch_ms = models.PositiveIntegerField(default=0)
+    last_watch_percent = models.FloatField(default=0.0)
+    
+    last_action = models.CharField(max_length=50, blank=True, null=True, db_index=True)
+    
+    first_seen_at = models.DateTimeField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         unique_together = ('user', 'content_id', 'content_type')
         indexes = [
-            models.Index(fields=['user', 'content_type', 'status']),
-            models.Index(fields=['user', 'last_interacted_at']),
+            models.Index(fields=['user', 'content_type', 'last_action']),
+            models.Index(fields=['user', 'last_seen_at']),
         ]
 
     def __str__(self):
-        return f"{self.user_id} -> {self.content_type}:{self.content_id} ({self.status})"
+        return f"{self.user_id} -> {self.content_type}:{self.content_id} ({self.last_action})"
