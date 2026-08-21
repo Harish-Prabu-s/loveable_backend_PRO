@@ -273,8 +273,8 @@ def repost_reel(user, original_reel_id):
     if original.is_archived:
         return None, 'deleted'
 
-    if not original.mentions.filter(id=user.id).exists() and original.user != user:
-        return None, 'not_mentioned'
+    # Removed mention requirement so anyone can repost
+    pass
 
     repost = Reel.objects.create(
         user=user,

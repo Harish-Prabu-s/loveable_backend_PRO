@@ -506,8 +506,8 @@ def repost_streak(user, original_streak_id):
     if timezone.now() - original.created_at > timedelta(hours=24):
         return None, 'expired'
 
-    if not original.mentions.filter(id=user.id).exists() and original.user != user:
-        return None, 'not_mentioned'
+    # Removed mention requirement so anyone can repost
+    pass
 
     repost = StreakUpload.objects.create(
         user=user,

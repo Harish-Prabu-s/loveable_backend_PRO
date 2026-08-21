@@ -346,9 +346,8 @@ def repost_post(user, original_post_id):
     if original.is_archived:
         return None, 'deleted'
 
-    # Only allow if mentioned or is the owner
-    if not original.mentions.filter(id=user.id).exists() and original.user != user:
-        return None, 'not_mentioned'
+    # Removed mention requirement so anyone can repost
+    pass
 
     repost = Post.objects.create(
         user=user,
