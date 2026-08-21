@@ -210,22 +210,53 @@ def rebuild_user_feeds():
             from api.modules.rec_filter.seen import get_seen_items
             seen_content_ids = get_seen_items(user_id)
 
-            # 2. Fetch User Interest Profile from Redis
+            # 2. Fetch User Interest Profile from Redis (legacy for negative confidence)
             profile_json = r.get(f'profile:{user_id}')
             profile = json.loads(profile_json) if profile_json else {}
-            
-            long_term = profile.get('long_term', {})
-            short_term = profile.get('short_term', {})
-            session = profile.get('session', {})
             negative = profile.get('negative_confidence', {})
 
-            # 2.5 FAISS Retrieval (Phase 3.2)
-            # Find the user's top interest topic to query the vector index
-            user_candidates = set(top_content_keys)
+            # 2.1 Fetch Fast Hierarchical Interests from Redis
+            interests_json = r.get(f'user:{user_id}:interests')
+            interests = json.loads(interests_json) if interests_json else {}
+
+            # 2.2 Fetch Social Graph & Friend Candidates
+            from api.modules.feature_store.models import UserSocialAffinity
+            from api.modules.rec_events.models import RecEvent
             
-            if long_term and vector_index.index is not None:
+            top_friends = UserSocialAffinity.objects.filter(
+                user_id=user_id, affinity_score__gt=0
+            ).order_by('-affinity_score')[:10]
+            friend_ids = [f.target_user_id for f in top_friends]
+            
+            user_candidates = set(top_content_keys)
+            social_proof_map = {}
+            candidate_sources = {}
+            source_user_ids = {}
+            
+            if friend_ids:
+                # Get what friends liked recently
+                friend_likes = RecEvent.objects.filter(
+                    user_id__in=friend_ids, event_type='like'
+                ).order_by('-timestamp')[:50]
+                
+                for event in friend_likes:
+                    key = (event.content_type, event.content_id)
+                    user_candidates.add(key)
+                    
+                    candidate_sources[key] = 'SOCIAL_GRAPH'
+                    source_user_ids[key] = event.user_id
+                    
+                    if key not in social_proof_map:
+                        social_proof_map[key] = []
+                    # We store just the user_id for now, FE can resolve username or we can attach it later
+                    if event.user_id not in social_proof_map[key]:
+                        social_proof_map[key].append(event.user_id)
+
+            # 2.5 FAISS Retrieval (Phase 3.2)
+            
+            if interests and vector_index.index is not None:
                 # Get the user's top interest topic
-                top_topic = max(long_term.items(), key=lambda x: x[1])[0]
+                top_topic = max(interests.items(), key=lambda x: x[1])[0]
                 
                 # We need the vector representation of this topic.
                 # In a real system, we'd query a dictionary of topic embeddings.
@@ -295,12 +326,8 @@ def rebuild_user_feeds():
                 p_score = 0.0
                 tags = meta.get('tags', [])
                 for tag in tags:
-                    # Session intent is weighted highest (0.5), then short (0.3), then long (0.2)
-                    topic_score = (
-                        0.5 * session.get(tag, 0.0) +
-                        0.3 * short_term.get(tag, 0.0) +
-                        0.2 * long_term.get(tag, 0.0)
-                    )
+                    # New hierarchical scoring: just use the cached interest score
+                    topic_score = interests.get(tag, 0.0)
                     
                     # Heavy penalty for negative topics
                     if tag in negative:
@@ -317,8 +344,22 @@ def rebuild_user_feeds():
                 # Creator Quality Score (0-100)
                 c_score = creator_scores.get(meta['creator_id'], 50.0) # default 50
                 
-                # Base heuristic score: 50% personalization, 30% global popularity, 20% creator quality
-                heuristic_score = (0.5 * p_score * 100) + (0.3 * base_rank_score) + (0.2 * c_score)
+                # Social Affinity Score (if friends liked it)
+                s_score = 0.0
+                if content_key in social_proof_map:
+                    s_score = 50.0
+                    meta['social_proof'] = {
+                        'type': 'liked',
+                        'user_ids': social_proof_map[content_key]
+                    }
+                
+                # Base heuristic score: 40% personalization, 20% global popularity, 20% creator quality, 20% social
+                heuristic_score = (0.4 * p_score * 100) + (0.2 * base_rank_score) + (0.2 * c_score) + (0.2 * s_score)
+                
+                # Apply Seen Penalty (Phase 27)
+                # If the user has already seen this content, penalize heavily so it only shows if score is exceptionally high
+                if str(content_key[1]) in seen_content_ids or content_key[1] in seen_content_ids:
+                    heuristic_score *= 0.10
                 
                 # Apply Phase 3: Deep Ranker + Satisfaction predictor
                 final_score = ranker.score_candidate(
@@ -366,6 +407,25 @@ def rebuild_user_feeds():
                     if len(feed_items) >= max_feed_items:
                         break
 
+            # Inject candidate sources and social proof
+            position = 1
+            for item in feed_items:
+                k = (item['type'], item['content_id'])
+                if item.get('is_exploration'):
+                    item['candidate_source'] = 'EXPLORE'
+                else:
+                    item['candidate_source'] = candidate_sources.get(k, 'TRENDING')
+                
+                src_user = source_user_ids.get(k, None)
+                if src_user:
+                    item['source_user_id'] = src_user
+                    
+                if k in social_proof_map and social_proof_map[k]:
+                    item['social_context'] = f'Liked by {len(social_proof_map[k])} friends'
+                
+                item['position'] = position
+                position += 1
+
             # Write to Redis, paginated
             for page in range(1, NUM_PAGES + 1):
                 start_idx = (page - 1) * FEED_SIZE
@@ -377,7 +437,7 @@ def rebuild_user_feeds():
                     r.set(feed_key, json.dumps(page_items), ex=FEED_TTL_SECONDS)
                     
             feeds_built += 1
-
+            
         except Exception as e:
             logger.error(f'Failed to build feed for user {user_id}: {e}')
             continue

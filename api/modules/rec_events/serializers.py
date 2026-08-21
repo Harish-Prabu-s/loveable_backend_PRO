@@ -25,19 +25,39 @@ class RecEventSerializer(serializers.Serializer):
         'follow', 'skip', 'not_interested', 'hide', 'report',
         # Rewatch / revisit event types (Blueprint §5-§8)
         'revisit', 'rewatch', 'rewatch_complete', 'navigation_back',
+        # Master Tracking Events
+        'impression_start', 'progress', 'loop', 'impression_end',
+        # Social & Unified Tracking Events
+        'profile_view', 'search', 'message', 'tag', 'mention',
+        'profile_card_open', 'social_reaction', 'message_from_social_card',
+        'tagged_in_reel', 'friend_request_sent',
+        # Impressions
+        'impression_shown',
     }
-    VALID_SOURCES = {'feed', 'search', 'profile', 'explore'}
-    VALID_CONTENT_TYPES = {'reel', 'post'}
+    VALID_SOURCES = {'feed', 'search', 'profile', 'explore', 'reel_liker'}
+    VALID_CONTENT_TYPES = {'reel', 'post', 'profile', 'search_query'}
 
     event_id = serializers.UUIDField(required=True)
-    content_id = serializers.IntegerField(required=True, min_value=1)
-    content_type = serializers.CharField(required=False, default='reel', max_length=10)
+    content_id = serializers.IntegerField(required=False, min_value=1, allow_null=True)
+    content_type = serializers.CharField(required=False, default='reel', max_length=20)
     creator_id = serializers.IntegerField(required=False, min_value=1, allow_null=True)
     event_type = serializers.CharField(required=True, max_length=20)
     watch_pct = serializers.FloatField(required=False, default=0.0)
     session_id = serializers.UUIDField(required=False, allow_null=True)
+    play_session_id = serializers.UUIDField(required=False, allow_null=True)
     timestamp = serializers.DateTimeField(required=True)
     source = serializers.CharField(required=False, default='feed', max_length=20)
+    
+    # Master Tracking Fields
+    watch_ms = serializers.IntegerField(required=False, min_value=0, allow_null=True)
+    loop_index = serializers.IntegerField(required=False, min_value=0, default=0)
+    scroll_direction = serializers.CharField(required=False, max_length=10, allow_null=True)
+    
+    # Impression/Feedback Loop Fields
+    candidate_source = serializers.CharField(required=False, max_length=50, allow_null=True)
+    position = serializers.IntegerField(required=False, allow_null=True)
+    source_user_id = serializers.IntegerField(required=False, min_value=1, allow_null=True)
+
     device_context = serializers.DictField(required=False, default=dict)
     # Granular milestones (Blueprint §2): e.g. ['play_start', '2s', '25%', '50%', '75%', '100%']
     milestones = serializers.ListField(

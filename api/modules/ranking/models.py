@@ -78,3 +78,36 @@ class CreatorScore(models.Model):
 
     def __str__(self):
         return f'CreatorScore(creator_id={self.creator_id}, quality={self.quality_score:.2f})'
+
+class RecommendationImpression(models.Model):
+    """
+    Logs every time a recommendation is physically shown to a user.
+    This enables the feedback loop: we know *why* we showed it, and we can 
+    measure if the user responded positively.
+    """
+    user_id = models.PositiveBigIntegerField(db_index=True)
+    content_id = models.PositiveBigIntegerField()
+    content_type = models.CharField(max_length=10, default='reel')
+    
+    # Why was it recommended?
+    candidate_source = models.CharField(max_length=50, help_text="e.g. SOCIAL_GRAPH, TRENDING, EXPLORE")
+    source_user_id = models.PositiveBigIntegerField(null=True, blank=True, help_text="If recommended because of a friend")
+    
+    # Internal metrics at time of ranking
+    recommendation_score = models.FloatField(default=0.0)
+    model_version = models.CharField(max_length=50, default='v1.0')
+    
+    # Context
+    session_id = models.UUIDField(null=True, blank=True)
+    position = models.IntegerField(default=0)
+    
+    shown_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user_id', 'content_id']),
+            models.Index(fields=['session_id']),
+        ]
+
+    def __str__(self):
+        return f"Impression(user={self.user_id}, content={self.content_id}, src={self.candidate_source})"

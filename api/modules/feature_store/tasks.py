@@ -82,8 +82,6 @@ def sync_user_features():
             # Pre-fetch content tags for these events
             content_ids = [e.content_id for e in events]
             
-            # Since content could be Reels or Posts, we query both and extract hashtags
-            # In a real app we'd query the Content table directly.
             reel_tags = Reel.objects.filter(id__in=content_ids).prefetch_related('hashtags')
             post_tags = Post.objects.filter(id__in=content_ids).prefetch_related('hashtags')
             
@@ -93,36 +91,51 @@ def sync_user_features():
             for post in post_tags:
                 tag_lookup[post.id] = [tag.name.lower() for tag in post.hashtags.all()]
                 
-            # Attach topics to events
-            event_dicts = []
-            for event in events:
-                topics = tag_lookup.get(event.content_id, [])
-                event_dicts.append({
-                    'event_type': event.event_type,
-                    'watch_pct': event.watch_pct,
-                    'session_id': event.session_id,
-                    'topics': topics
-                })
-                
-            # Update the profile (in-memory)
-            profile = update_interest_vectors(profile, event_dicts, now=now)
-            
-            # Save to MySQL
-            profile.save()
-
-            # Update Granular UserInterestEntities
-            from api.modules.ranking.services import EVENT_WEIGHTS
+            from api.modules.ranking.taxonomy import expand_tags
             from api.modules.feature_store.models import UserInterestEntity
+            
+            # Decay existing scores: -5% per day since last_interacted_at
+            # This satisfies the "Score Decay" requirement
+            existing_entities = UserInterestEntity.objects.filter(user_id=user_id)
+            for entity in existing_entities:
+                days_since = (now - entity.last_interacted_at).days
+                if days_since > 0:
+                    decay_factor = (0.95 ** days_since)
+                    entity.interest_score = entity.interest_score * decay_factor
+                    entity.last_interacted_at = now
+                    entity.save()
 
-            for event in event_dicts:
-                topics = event.get('topics', [])
-                event_type = event.get('event_type')
-                weight = EVENT_WEIGHTS.get(event_type, 0.0)
-
-                # Scale weight for watch-like events
-                if event_type in ('watch', 'replay', 'rewatch', 'rewatch_complete'):
-                    weight *= max(event.get('watch_pct', 0.0), 0.1)
-
+            for event in events:
+                raw_topics = tag_lookup.get(event.content_id, [])
+                # Apply hierarchical topic modeling (e.g. m4 -> bmw -> cars)
+                topics = expand_tags(raw_topics)
+                
+                event_type = event.event_type
+                watch_pct = event.watch_pct
+                
+                # Apply specific blueprint math for scoring
+                weight = 0.0
+                if event_type == 'watch':
+                    if watch_pct and watch_pct >= 0.95:
+                        weight = 0.15
+                    elif watch_pct and watch_pct >= 0.50:
+                        weight = 0.10
+                elif event_type == 'like':
+                    weight = 0.10
+                elif event_type == 'save':
+                    weight = 0.15
+                elif event_type == 'share':
+                    weight = 0.20
+                elif event_type == 'follow':
+                    weight = 0.15
+                elif event_type in ('not_interested', 'hide'):
+                    weight = -0.50
+                elif event_type == 'skip':
+                    weight = -0.10
+                    
+                if weight == 0.0:
+                    continue
+                    
                 is_positive = weight > 0
                 is_negative = weight < 0
 
@@ -133,25 +146,92 @@ def sync_user_features():
                         entity_id=topic,
                     )
                     
-                    # Accumulate score (decay old score slowly, add new weight)
-                    # Simplified EMA: keep 90% of old score, add new weight
-                    entity.interest_score = (entity.interest_score * 0.9) + weight
+                    # Accumulate score based on the raw blueprint logic
+                    entity.interest_score += weight
+                    # Bound it between 0 and 1.0 if we want it to strictly match 0.96 scale,
+                    # but capping at 1.0 might lose relative strengths. We'll let it grow 
+                    # but naturally decay, or we can cap it at 1.0. Let's cap at 1.0 for simplicity.
+                    entity.interest_score = min(max(entity.interest_score, 0.0), 1.0)
                     
                     if is_positive:
                         entity.positive_count += 1
                     elif is_negative:
                         entity.negative_count += 1
                     
+                    entity.last_interacted_at = now
                     entity.save()
             
-            # Mirror to Redis
-            profile_data = {
-                'long_term': profile.long_term,
-                'short_term': profile.short_term,
-                'session': profile.session,
-                'negative_confidence': profile.negative_confidence
-            }
-            r.set(f"profile:{user_id}", json.dumps(profile_data))
+            # --- PHASE 3: Social & Creator Affinity Updates ---
+            from api.modules.feature_store.models import UserSocialAffinity, UserCreatorAffinity
+            
+            for event in events:
+                # 1. Creator Affinity
+                if event.creator_id and event.creator_id != user_id:
+                    # Give points for engaging with creator's content or profile
+                    c_weight = 0.0
+                    if event.event_type in ('watch', 'like', 'save', 'share', 'comment'):
+                        c_weight = 0.10
+                    elif event.event_type == 'follow':
+                        c_weight = 0.50
+                    elif event.event_type == 'profile_view' and event.content_type == 'profile':
+                        c_weight = 0.20
+                        
+                    if c_weight > 0:
+                        c_affinity, _ = UserCreatorAffinity.objects.get_or_create(
+                            user_id=user_id, creator_id=event.creator_id
+                        )
+                        c_affinity.affinity_score += c_weight
+                        c_affinity.interaction_count += 1
+                        c_affinity.last_interaction_at = now
+                        c_affinity.save()
+                
+                # 2. Social Affinity
+                # For social interactions, target_user is usually passed in content_id or device_context
+                target_user_id = None
+                if event.content_type == 'profile' and event.content_id:
+                    target_user_id = event.content_id
+                elif event.event_type in ('message', 'tag', 'mention', 'message_from_social_card', 'friend_request_sent'):
+                    # Assume target is passed in device_context for MVP
+                    target_user_id = event.device_context.get('target_user_id')
+                elif event.event_type in ('profile_card_open', 'social_reaction', 'tagged_in_reel'):
+                    target_user_id = event.device_context.get('target_user_id') or event.creator_id
+                    
+                if target_user_id and target_user_id != user_id:
+                    s_weight = 0.0
+                    if event.event_type == 'friend_request_sent':
+                        s_weight = 0.80  # Very Strong
+                    elif event.event_type in ('message', 'message_from_social_card'):
+                        s_weight = 0.50  # Strong signal
+                    elif event.event_type in ('tag', 'mention', 'tagged_in_reel'):
+                        s_weight = 0.40
+                    elif event.event_type == 'social_reaction':
+                        s_weight = 0.30
+                    elif event.event_type in ('profile_view', 'profile_card_open'):
+                        s_weight = 0.20
+                        
+                    if s_weight > 0:
+                        s_affinity, _ = UserSocialAffinity.objects.get_or_create(
+                            user_id=user_id, target_user_id=target_user_id
+                        )
+                        s_affinity.affinity_score += s_weight
+                        s_affinity.interaction_count += 1
+                        s_affinity.last_interaction_at = now
+                        s_affinity.save()
+            # ------------------------------------------------
+            
+            # Serialize the Top 50 interests into a flat JSON dictionary for Redis
+            top_interests = UserInterestEntity.objects.filter(
+                user_id=user_id, entity_type='CATEGORY', interest_score__gt=0
+            ).order_by('-interest_score')[:50]
+            
+            redis_interests = {entity.entity_id: entity.interest_score for entity in top_interests}
+            
+            # Cache into Redis for ultra-low latency recommendation assembly
+            r.set(f"user:{user_id}:interests", json.dumps(redis_interests))
+            
+            # Also update legacy UserInterestProfile for backwards compatibility
+            profile.updated_at = now
+            profile.save()
             
             synced_count += 1
             

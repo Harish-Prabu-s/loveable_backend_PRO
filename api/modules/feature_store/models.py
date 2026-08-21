@@ -85,3 +85,46 @@ class UserInterestEntity(models.Model):
 
     def __str__(self):
         return f"{self.user_id} -> {self.entity_type}:{self.entity_id} ({self.interest_score:.2f})"
+
+
+class UserSocialAffinity(models.Model):
+    """
+    Stores the relationship strength between two users based on messaging,
+    profile views, tagging, and interactions.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='social_affinities')
+    target_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='social_affinities_target')
+    
+    affinity_score = models.FloatField(default=0.0, db_index=True)
+    interaction_count = models.IntegerField(default=0)
+    last_interaction_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'target_user')
+        indexes = [
+            models.Index(fields=['user', '-affinity_score']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} -> {self.target_user_id} ({self.affinity_score:.2f})"
+
+
+class UserCreatorAffinity(models.Model):
+    """
+    Stores the relationship strength between a user and a content creator.
+    """
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='creator_affinities')
+    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='creator_affinities_target')
+    
+    affinity_score = models.FloatField(default=0.0, db_index=True)
+    interaction_count = models.IntegerField(default=0)
+    last_interaction_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'creator')
+        indexes = [
+            models.Index(fields=['user', '-affinity_score']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} -> {self.creator_id} (Creator) ({self.affinity_score:.2f})"

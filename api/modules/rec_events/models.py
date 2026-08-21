@@ -44,6 +44,17 @@ class RecEvent(models.Model):
         ('rewatch', 'Rewatch'),                    # User actively watches previously seen content again
         ('rewatch_complete', 'Rewatch Complete'),  # User completes a rewatch
         ('navigation_back', 'Navigation Back'),    # Neutral backward scroll navigation
+        # Master Tracking Events
+        ('impression_start', 'Impression Start'),
+        ('progress', 'Progress'),
+        ('loop', 'Loop'),
+        ('impression_end', 'Impression End'),
+        # Social & Unified Tracking Events
+        ('profile_view', 'Profile View'),
+        ('search', 'Search'),
+        ('message', 'Message'),
+        ('tag', 'Tag'),
+        ('mention', 'Mention'),
     )
 
     SOURCE_CHOICES = (
@@ -62,17 +73,19 @@ class RecEvent(models.Model):
         db_index=True,
     )
     content_id = models.PositiveBigIntegerField(
-        db_index=True,
+        db_index=True, null=True, blank=True,
         help_text='ID of the Reel/Post/Content this event refers to.',
     )
     CONTENT_TYPE_CHOICES = (
         ('reel', 'Reel'),
         ('post', 'Post'),
+        ('profile', 'Profile'),
+        ('search_query', 'Search Query'),
     )
     content_type = models.CharField(
-        max_length=10, choices=CONTENT_TYPE_CHOICES, default='reel',
+        max_length=20, choices=CONTENT_TYPE_CHOICES, default='reel',
         db_index=True,
-        help_text='The type of content (reel or post).',
+        help_text='The type of content (reel, post, profile, search).',
     )
     creator_id = models.PositiveBigIntegerField(
         null=True, blank=True,
@@ -88,7 +101,11 @@ class RecEvent(models.Model):
     # Session tracking
     session_id = models.UUIDField(
         null=True, blank=True, db_index=True,
-        help_text='Client-assigned session ID. Used for session-interest vector.',
+        help_text='Overall app session ID (legacy).',
+    )
+    play_session_id = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        help_text='One per continuous engagement with a single reel.',
     )
 
     timestamp = models.DateTimeField(db_index=True)
@@ -100,6 +117,20 @@ class RecEvent(models.Model):
     device_context = models.JSONField(
         default=dict, blank=True,
         help_text='Flexible client metadata: time_of_day, platform, etc.',
+    )
+
+    # Master Tracking Plan Fields
+    watch_ms = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text='Total time spent watching during this event.',
+    )
+    loop_index = models.PositiveSmallIntegerField(
+        default=0,
+        help_text='Increments per in-session Loop/Replay.',
+    )
+    scroll_direction = models.CharField(
+        max_length=10, null=True, blank=True,
+        help_text='Direction scrolled (up or down).',
     )
 
     # Granular watch milestones (Blueprint §2 event pipeline)
@@ -150,8 +181,57 @@ class SessionLog(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     
+    # Precomputed aggregates
+    total_reels_watched = models.IntegerField(default=0)
+    total_reels_skipped = models.IntegerField(default=0)
+    total_watch_time_sec = models.IntegerField(default=0)
+    total_likes = models.IntegerField(default=0)
+    total_comments = models.IntegerField(default=0)
+    total_shares = models.IntegerField(default=0)
+
+    # Re-engagement metric: True if user returned after >12 hours of inactivity
+    is_reengagement_session = models.BooleanField(default=False)
+
     class Meta:
         indexes = [
             models.Index(fields=['user', '-start_time']),
         ]
         ordering = ['-start_time']
+
+    def __str__(self):
+        return f"Session {self.session_id} for user {self.user_id}"
+
+
+class UserContentInterest(models.Model):
+    """
+    Aggregate tracking model per user+content pair (Master Plan §2.2).
+    Provides fast reads for UI badges ('Watched', 'Rewatched') without counting raw events.
+    """
+    STATUS_CHOICES = (
+        ('skipped', 'Skipped'),
+        ('watched', 'Watched'),
+        ('rewatched', 'Rewatched'),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='content_interests')
+    content_id = models.PositiveBigIntegerField(db_index=True)
+    content_type = models.CharField(max_length=20, default='reel')
+    
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES)
+    best_watch_percent = models.FloatField(default=0.0)
+    total_watch_ms = models.PositiveIntegerField(default=0)
+    session_count = models.PositiveSmallIntegerField(default=0)
+    replay_count = models.PositiveSmallIntegerField(default=0)
+    skip_count = models.PositiveSmallIntegerField(default=0)
+    
+    first_watched_at = models.DateTimeField(null=True, blank=True)
+    last_interacted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('user', 'content_id', 'content_type')
+        indexes = [
+            models.Index(fields=['user', 'content_type', 'status']),
+            models.Index(fields=['user', 'last_interacted_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} -> {self.content_type}:{self.content_id} ({self.status})"

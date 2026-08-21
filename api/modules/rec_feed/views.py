@@ -12,22 +12,20 @@ it falls back to the existing feed algorithm for a graceful degradation.
 
 import json
 import logging
-
 import redis
 from django.conf import settings
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from api.models import Post, Reel
+from api.serializers import PostSerializer, ReelSerializer
 
 logger = logging.getLogger(__name__)
 
-# Lazy-initialized Redis connection for feed cache
 _cache_redis = None
 
-
 def _get_cache_redis():
-    """Get Redis connection for the feed cache (DB 3)."""
     global _cache_redis
     if _cache_redis is None:
         _cache_redis = redis.Redis.from_url(
@@ -36,30 +34,17 @@ def _get_cache_redis():
         )
     return _cache_redis
 
-
 class RecommendedFeedView(APIView):
     """
     GET /api/rec/feed/
-
-    Returns the user's personalized feed (up to 20 items).
-
-    Response format:
-    {
-        "source": "recommendation" | "fallback",
-        "items": [
-            {
-                "content_id": 123,
-                "type": "reel",
-                "creator_id": 45,
-                "caption": "...",
-                "created_at": "2026-08-18T...",
-                "engagement_score": 42.5,
-                "view_count": 100,
-                "share_count": 5
-            },
-            ...
-        ]
-    }
+    
+    Query Params:
+    - page (int): Default 1
+    - limit (int): Default 20
+    - content_type (str): 'post' or 'reel' or 'all' (default 'all')
+    
+    Reads from Redis for order, then queries MySQL to serialize full objects.
+    Returns standard DRF paginated structure.
     """
     permission_classes = [IsAuthenticated]
 
@@ -72,74 +57,61 @@ class RecommendedFeedView(APIView):
         except ValueError:
             page = 1
             limit = 20
+            
+        content_type_filter = request.query_params.get('content_type', 'all')
 
         try:
             r = _get_cache_redis()
             feed_json = r.get(f'feed:{user_id}:page:{page}')
-
+            
+            raw_items = []
             if feed_json:
-                items = json.loads(feed_json)
-                
-                # Check if next page exists
+                raw_items = json.loads(feed_json)
                 next_page_json = r.get(f'feed:{user_id}:page:{page + 1}')
                 has_next = next_page_json is not None
+            else:
+                # Fallback
+                from api.modules.feed.algorithm import get_personalized_feed
+                fallback_items = get_personalized_feed(
+                    request.user, limit=20, page=page, content_type='all' if content_type_filter == 'all' else f"{content_type_filter}s"
+                )
+                raw_items = [{'content_id': item['id'], 'type': item['type']} for item in fallback_items]
+                has_next = False
+
+            if content_type_filter != 'all':
+                raw_items = [item for item in raw_items if item['type'] == content_type_filter]
                 
-                return Response({
-                    'source': 'recommendation',
-                    'page': page,
-                    'limit': limit,
-                    'has_next': has_next,
-                    'next_page': page + 1 if has_next else None,
-                    'items': items,
-                    'count': len(items),
-                })
-
-        except redis.RedisError as e:
-            logger.error(f'Redis error reading feed for user {user_id}: {e}')
-            # Fall through to fallback
-
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.error(f'Invalid feed JSON for user {user_id}: {e}')
-            # Fall through to fallback
-
-        # ── Fallback: use the existing feed algorithm ──────────────────────
-        # This ensures new users and users without cached feeds still get
-        # a reasonable feed while the recommendation engine warms up.
-        try:
-            from api.modules.feed.algorithm import get_personalized_feed
-
-            fallback_items = get_personalized_feed(
-                request.user, limit=20, page=1, content_type='reels',
-            )
-
-            items = []
-            for item in fallback_items:
-                obj = item['obj']
-                items.append({
-                    'content_id': item['id'],
-                    'type': item['type'],
-                    'creator_id': obj.user_id,
-                    'caption': (obj.caption or '')[:200],
-                    'created_at': obj.created_at.isoformat() if obj.created_at else None,
-                    'engagement_score': getattr(obj, 'engagement_score', 0.0),
-                    'view_count': getattr(obj, 'view_count', 0),
-                    'share_count': getattr(obj, 'share_count', 0),
-                })
+            post_ids = [item['content_id'] for item in raw_items if item['type'] == 'post']
+            reel_ids = [item['content_id'] for item in raw_items if item['type'] == 'reel']
+            
+            # Fetch full objects
+            posts = {p.id: p for p in Post.objects.filter(id__in=post_ids).select_related('user__profile', 'audio_details')}
+            reels = {r.id: r for r in Reel.objects.filter(id__in=reel_ids).select_related('user__profile', 'audio_details')}
+            
+            final_items = []
+            for item in raw_items:
+                if item['type'] == 'post' and item['content_id'] in posts:
+                    ser = PostSerializer(posts[item['content_id']], context={'request': request}).data
+                    ser['_rec_type'] = 'post'
+                    final_items.append(ser)
+                elif item['type'] == 'reel' and item['content_id'] in reels:
+                    ser = ReelSerializer(reels[item['content_id']], context={'request': request}).data
+                    ser['_rec_type'] = 'reel'
+                    final_items.append(ser)
 
             return Response({
-                'source': 'fallback',
+                'source': 'recommendation' if feed_json else 'fallback',
                 'page': page,
                 'limit': limit,
-                'has_next': False,
-                'next_page': None,
-                'items': items,
-                'count': len(items),
+                'has_next': has_next,
+                'next': f'/api/rec/feed/?page={page+1}&limit={limit}&content_type={content_type_filter}' if has_next else None,
+                'results': final_items,
+                'count': len(final_items),
             })
 
         except Exception as e:
-            logger.error(f'Fallback feed also failed for user {user_id}: {e}')
+            logger.error(f'Feed error for user {user_id}: {e}')
             return Response(
-                {'source': 'error', 'items': [], 'count': 0,
-                 'error': 'Feed temporarily unavailable.'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                {'source': 'error', 'results': [], 'count': 0, 'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

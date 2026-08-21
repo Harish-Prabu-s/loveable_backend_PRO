@@ -92,15 +92,20 @@ class EventIngestView(APIView):
         stream_message = {
             'event_id': str(validated['event_id']),
             'user_id': str(request.user.id),
-            'content_id': str(validated['content_id']),
+            'content_id': str(validated.get('content_id') or ''),
             'content_type': validated.get('content_type', 'reel'),
             'creator_id': str(validated.get('creator_id') or ''),
             'event_type': validated['event_type'],
             'watch_pct': str(validated.get('watch_pct', 0.0)),
             'session_id': session_id,
+            'play_session_id': str(validated.get('play_session_id') or ''),
+            'watch_ms': str(validated.get('watch_ms') or ''),
+            'loop_index': str(validated.get('loop_index', 0)),
+            'scroll_direction': str(validated.get('scroll_direction') or ''),
             'timestamp': validated['timestamp'].isoformat(),
             'source': validated.get('source', 'feed'),
             'device_context': json.dumps(validated.get('device_context', {})),
+            'milestones': json.dumps(validated.get('milestones', [])),
         }
 
         try:

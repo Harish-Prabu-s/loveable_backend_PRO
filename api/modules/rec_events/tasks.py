@@ -73,15 +73,31 @@ def _parse_stream_event(fields: dict) -> dict:
     else:
         session_id = None
 
+    play_session_id = fields.get('play_session_id', '')
+    if play_session_id:
+        try:
+            play_session_id = uuid.UUID(play_session_id)
+        except ValueError:
+            play_session_id = None
+    else:
+        play_session_id = None
+
     return {
         'event_id': uuid.UUID(fields['event_id']),
         'user_id': int(fields['user_id']),
-        'content_id': int(fields['content_id']),
+        'content_id': int(fields['content_id']) if fields.get('content_id') else None,
         'content_type': fields.get('content_type', 'reel'),
         'creator_id': int(fields['creator_id']) if fields.get('creator_id') else None,
         'event_type': fields['event_type'],
         'watch_pct': float(fields.get('watch_pct', 0.0)),
         'session_id': session_id,
+        'play_session_id': play_session_id,
+        'watch_ms': int(fields['watch_ms']) if fields.get('watch_ms') else None,
+        'loop_index': int(fields.get('loop_index', 0)),
+        'scroll_direction': fields.get('scroll_direction') or None,
+        'candidate_source': fields.get('candidate_source') or None,
+        'position': int(fields['position']) if fields.get('position') else None,
+        'source_user_id': int(fields['source_user_id']) if fields.get('source_user_id') else None,
         'timestamp': datetime.fromisoformat(fields['timestamp']),
         'source': fields.get('source', 'feed'),
         'device_context': device_context,
@@ -148,8 +164,29 @@ def consume_event_stream():
 
                 parsed = _parse_stream_event(fields)
 
+                # Route 'impression_shown' to RecommendationImpression table
+                if parsed['event_type'] == 'impression_shown':
+                    from api.modules.ranking.models import RecommendationImpression
+                    
+                    if parsed['content_id']:
+                        RecommendationImpression.objects.create(
+                            user_id=parsed['user_id'],
+                            content_id=parsed['content_id'],
+                            content_type=parsed['content_type'],
+                            candidate_source=parsed.get('candidate_source') or 'UNKNOWN',
+                            source_user_id=parsed.get('source_user_id'),
+                            session_id=parsed['session_id'],
+                            position=parsed.get('position', 0),
+                            shown_at=parsed['timestamp']
+                        )
+                    
+                    # We continue without storing it as a RecEvent to keep behavioral events clean
+                    processed += 1
+                    ack_ids.append(msg_id)
+                    continue
+
                 # Skip superseding logic: if user fully watches, remove prior skips for this content
-                if parsed['event_type'] in ('watch', 'replay', 'rewatch', 'rewatch_complete'):
+                if parsed['event_type'] in ('watch', 'replay', 'rewatch', 'rewatch_complete', 'impression_end'):
                     RecEvent.objects.filter(
                         user_id=parsed['user_id'],
                         content_id=parsed['content_id'],
@@ -166,16 +203,78 @@ def consume_event_stream():
                     event_type=parsed['event_type'],
                     watch_pct=parsed['watch_pct'],
                     session_id=parsed['session_id'],
+                    play_session_id=parsed['play_session_id'],
+                    watch_ms=parsed['watch_ms'],
+                    loop_index=parsed['loop_index'],
+                    scroll_direction=parsed['scroll_direction'],
                     timestamp=parsed['timestamp'],
                     source=parsed['source'],
                     device_context=parsed['device_context'],
                 )
                 
+                # Master Tracking: Idempotent Upsert for UserContentInterest
+                from .models import UserContentInterest
+                from django.db.models import F
+
+                if parsed['event_type'] == 'skip' and parsed['content_id']:
+                    # If skip, just increment skip_count or create as skipped
+                    obj, created = UserContentInterest.objects.get_or_create(
+                        user_id=parsed['user_id'],
+                        content_id=parsed['content_id'],
+                        content_type=parsed['content_type'],
+                        defaults={'status': 'skipped', 'skip_count': 1}
+                    )
+                    if not created:
+                        UserContentInterest.objects.filter(id=obj.id).update(skip_count=F('skip_count') + 1)
+                        
+                elif parsed['event_type'] == 'impression_end' and parsed['content_id']:
+                    # We check if play_session_id is new for this user+content pair
+                    # In a real heavy system we'd use Redis to check if session is new, but here we can query
+                    is_new_session = not RecEvent.objects.filter(
+                        user_id=parsed['user_id'],
+                        content_id=parsed['content_id'],
+                        content_type=parsed['content_type'],
+                        play_session_id=parsed['play_session_id'],
+                        event_type='impression_end'
+                    ).exclude(event_id=parsed['event_id']).exists()
+
+                    obj, created = UserContentInterest.objects.get_or_create(
+                        user_id=parsed['user_id'],
+                        content_id=parsed['content_id'],
+                        content_type=parsed['content_type'],
+                        defaults={
+                            'status': 'watched', 
+                            'best_watch_percent': parsed['watch_pct'],
+                            'session_count': 1,
+                            'replay_count': parsed['loop_index'],
+                            'total_watch_ms': parsed.get('watch_ms') or 0,
+                            'first_watched_at': parsed['timestamp'],
+                            'last_interacted_at': parsed['timestamp']
+                        }
+                    )
+                    
+                    if not created:
+                        new_status = obj.status
+                        if is_new_session and obj.best_watch_percent >= 0.70:
+                            new_status = 'rewatched'
+                        elif obj.status == 'skipped':
+                            new_status = 'watched'
+
+                        UserContentInterest.objects.filter(id=obj.id).update(
+                            status=new_status,
+                            best_watch_percent=max(obj.best_watch_percent, parsed['watch_pct']),
+                            session_count=F('session_count') + (1 if is_new_session else 0),
+                            replay_count=F('replay_count') + parsed['loop_index'],
+                            total_watch_ms=F('total_watch_ms') + (parsed.get('watch_ms') or 0),
+                            last_interacted_at=parsed['timestamp']
+                        )
+
                 # Populate Redis seen filter (Phase 4.3)
                 # Mark content as seen if it was watched, skipped, or interacted with
-                if parsed['event_type'] in ('watch', 'rewatch', 'rewatch_complete', 'skip', 'not_interested', 'hide', 'like'):
+                if parsed['event_type'] in ('watch', 'rewatch', 'rewatch_complete', 'skip', 'not_interested', 'hide', 'like', 'impression_end'):
                     from api.modules.rec_filter.seen import mark_as_seen
-                    mark_as_seen(user_id=parsed['user_id'], content_id=parsed['content_id'])
+                    if parsed['content_id']:
+                        mark_as_seen(user_id=parsed['user_id'], content_id=parsed['content_id'])
                 
                 processed += 1
                 ack_ids.append(msg_id)
