@@ -85,8 +85,8 @@ class RecommendedFeedView(APIView):
             reel_ids = [item['content_id'] for item in raw_items if item['type'] == 'reel']
             
             # Fetch full objects
-            posts = {p.id: p for p in Post.objects.filter(id__in=post_ids).select_related('user__profile', 'audio_details')}
-            reels = {r.id: r for r in Reel.objects.filter(id__in=reel_ids).select_related('user__profile', 'audio_details')}
+            posts = {p.id: p for p in Post.objects.filter(id__in=post_ids).select_related('user__profile', 'audio')}
+            reels = {r.id: r for r in Reel.objects.filter(id__in=reel_ids).select_related('user__profile', 'audio')}
             
             final_items = []
             for item in raw_items:
