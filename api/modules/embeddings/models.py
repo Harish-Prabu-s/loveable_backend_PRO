@@ -13,7 +13,7 @@ import numpy as np
 
 class ContentEmbedding(models.Model):
     content_id = models.PositiveBigIntegerField(
-        unique=True, db_index=True,
+        db_index=True,
         help_text='ID of the Reel or Post this embedding refers to.'
     )
     content_type = models.CharField(
@@ -29,6 +29,9 @@ class ContentEmbedding(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     
+    class Meta:
+        unique_together = ('content_type', 'content_id')
+        
     def get_embedding(self) -> np.ndarray:
         """Helper to deserialize the binary blob back to a numpy array."""
         if not self.embedding_blob:
