@@ -302,10 +302,14 @@ def generate_and_store_otp_fast2sms(phone_number, method='POST'):
     )
     
     # Send via Fast2SMS using requested method
-    if method.upper() == 'GET':
-        result = send_fast2sms_otp_get(phone_number, otp)
-    else:
-        result = send_fast2sms_otp(phone_number, otp)
+    # --- ORIGINAL CODE (COMMENTED OUT FOR TESTING) ---
+    # if method.upper() == 'GET':
+    #     result = send_fast2sms_otp_get(phone_number, otp)
+    # else:
+    #     result = send_fast2sms_otp(phone_number, otp)
+    # -------------------------------------------------
+    print(f"\n{'='*50}\n FAST2SMS OTP BYPASSED FOR {phone_number}: {otp}\n{'='*50}\n")
+    result = {'success': True}
     
     if result.get('success'):
         logger.info(f"Fast2SMS OTP {otp} sent to {phone_number} via {method}")
@@ -322,8 +326,14 @@ def generate_and_store_otp(phone: str, channel: str = 'sms', trace: list = None)
 
     _trace(f"Entering generate_and_store_otp for {phone} (channel: {channel})")
     # DIRECT ENV CHECK - Bypassing Django settings layer for reliability
-    fast2sms_key = os.environ.get('FAST2SMS_API_KEY') or getattr(settings, 'FAST2SMS_API_KEY', None)
-    _trace(f"FAST2SMS_API_KEY configured: {bool(fast2sms_key)} (Preview: {str(fast2sms_key)[:4]}...)")
+    
+    # --- ORIGINAL CODE (COMMENTED OUT FOR TESTING) ---
+    # fast2sms_key = os.environ.get('FAST2SMS_API_KEY') or getattr(settings, 'FAST2SMS_API_KEY', None)
+    # _trace(f"FAST2SMS_API_KEY configured: {bool(fast2sms_key)} (Preview: {str(fast2sms_key)[:4]}...)")
+    # -------------------------------------------------
+    
+    fast2sms_key = False # FORCE DISABLED FOR LOCAL TESTING
+    _trace(f"FAST2SMS_API_KEY configured: {bool(fast2sms_key)} (Preview: False)")
 
     # 1. Generate Local code first
     code = ''.join(random.choices(string.digits, k=6))
@@ -355,7 +365,10 @@ def generate_and_store_otp(phone: str, channel: str = 'sms', trace: list = None)
 
     # 3. Try Twilio Verify (as secondary option)
     try:
-        sid = getattr(settings, 'TWILIO_ACCOUNT_SID', None)
+        # --- ORIGINAL CODE (COMMENTED OUT FOR TESTING) ---
+        # sid = getattr(settings, 'TWILIO_ACCOUNT_SID', None)
+        # -------------------------------------------------
+        sid = False # FORCE DISABLED FOR LOCAL TESTING
         token = getattr(settings, 'TWILIO_AUTH_TOKEN', None)
         verify_sid = getattr(settings, 'TWILIO_VERIFY_SID', None)
         
@@ -394,7 +407,10 @@ def generate_and_store_otp(phone: str, channel: str = 'sms', trace: list = None)
 def verify_otp(phone: str, code: str):
     # 1. Try Twilio Verify Check
     try:
-        sid = settings.TWILIO_ACCOUNT_SID
+        # --- ORIGINAL CODE (COMMENTED OUT FOR TESTING) ---
+        # sid = settings.TWILIO_ACCOUNT_SID
+        # -------------------------------------------------
+        sid = False # FORCE DISABLED FOR LOCAL TESTING
         token = settings.TWILIO_AUTH_TOKEN
         verify_sid = settings.TWILIO_VERIFY_SID
         
