@@ -161,15 +161,15 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'api.modules.rec_events.tasks.consume_event_stream',
         'schedule': 5,  # every 5 seconds
     },
-    # Phase 1, Task 2: Recompute popularity + CF scores hourly
+    # Phase 1, Task 2: Recompute popularity + CF scores hourly (CHANGED TO 1 MIN FOR TESTING)
     'recompute-popularity-cf-hourly': {
         'task': 'api.modules.ranking.tasks.compute_popularity_and_cf',
-        'schedule': 3600,  # every hour
+        'schedule': 60,  # every 1 minute
     },
-    # Phase 1, Task 3: Rebuild per-user feed caches every 5 minutes
+    # Phase 1, Task 3: Rebuild per-user feed caches every 5 minutes (CHANGED TO 1 MIN FOR TESTING)
     'rebuild-user-feeds': {
         'task': 'api.modules.ranking.tasks.rebuild_user_feeds',
-        'schedule': 300,  # every 5 minutes
+        'schedule': 60,  # every 1 minute
     },
     # Phase 2, Task 4: Sync feature store every 10 minutes
     'sync-user-features': {
