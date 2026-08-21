@@ -65,6 +65,15 @@ class RecEvent(models.Model):
         db_index=True,
         help_text='ID of the Reel/Post/Content this event refers to.',
     )
+    CONTENT_TYPE_CHOICES = (
+        ('reel', 'Reel'),
+        ('post', 'Post'),
+    )
+    content_type = models.CharField(
+        max_length=10, choices=CONTENT_TYPE_CHOICES, default='reel',
+        db_index=True,
+        help_text='The type of content (reel or post).',
+    )
     creator_id = models.PositiveBigIntegerField(
         null=True, blank=True,
         help_text='ID of the content creator (denormalized for fast queries).',
@@ -107,14 +116,13 @@ class RecEvent(models.Model):
 
     class Meta:
         # Composite index for the most common query patterns:
-        # "all events by user X for content Y" and "all events by user X in time range"
         indexes = [
-            models.Index(fields=['user', 'content_id', 'timestamp'],
-                         name='idx_recevent_user_content_ts'),
+            models.Index(fields=['user', 'content_type', 'content_id', 'timestamp'],
+                         name='idx_recev_user_ctype_cid_ts'),
             models.Index(fields=['user', 'timestamp'],
                          name='idx_recevent_user_ts'),
-            models.Index(fields=['content_id', 'timestamp'],
-                         name='idx_recevent_content_ts'),
+            models.Index(fields=['content_type', 'content_id', 'timestamp'],
+                         name='idx_recev_ctype_cid_ts'),
         ]
         ordering = ['-timestamp']
 

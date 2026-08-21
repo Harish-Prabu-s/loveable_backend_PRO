@@ -27,7 +27,7 @@ class ContentScore(models.Model):
     """
 
     content_id = models.PositiveBigIntegerField(
-        unique=True, db_index=True,
+        db_index=True,
         help_text='ID of the Reel or Post this score refers to.',
     )
     content_type = models.CharField(
@@ -44,6 +44,7 @@ class ContentScore(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        unique_together = ('content_type', 'content_id')
         indexes = [
             models.Index(fields=['-combined_score'], name='idx_cscore_combined_desc'),
         ]

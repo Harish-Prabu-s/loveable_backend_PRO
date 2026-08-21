@@ -77,6 +77,7 @@ def _parse_stream_event(fields: dict) -> dict:
         'event_id': uuid.UUID(fields['event_id']),
         'user_id': int(fields['user_id']),
         'content_id': int(fields['content_id']),
+        'content_type': fields.get('content_type', 'reel'),
         'creator_id': int(fields['creator_id']) if fields.get('creator_id') else None,
         'event_type': fields['event_type'],
         'watch_pct': float(fields.get('watch_pct', 0.0)),
@@ -147,10 +148,20 @@ def consume_event_stream():
 
                 parsed = _parse_stream_event(fields)
 
+                # Skip superseding logic: if user fully watches, remove prior skips for this content
+                if parsed['event_type'] in ('watch', 'replay', 'rewatch', 'rewatch_complete'):
+                    RecEvent.objects.filter(
+                        user_id=parsed['user_id'],
+                        content_id=parsed['content_id'],
+                        content_type=parsed['content_type'],
+                        event_type='skip'
+                    ).delete()
+
                 RecEvent.objects.create(
                     event_id=parsed['event_id'],
                     user_id=parsed['user_id'],
                     content_id=parsed['content_id'],
+                    content_type=parsed['content_type'],
                     creator_id=parsed['creator_id'],
                     event_type=parsed['event_type'],
                     watch_pct=parsed['watch_pct'],

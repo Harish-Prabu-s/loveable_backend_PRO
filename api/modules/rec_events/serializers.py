@@ -27,9 +27,11 @@ class RecEventSerializer(serializers.Serializer):
         'revisit', 'rewatch', 'rewatch_complete', 'navigation_back',
     }
     VALID_SOURCES = {'feed', 'search', 'profile', 'explore'}
+    VALID_CONTENT_TYPES = {'reel', 'post'}
 
     event_id = serializers.UUIDField(required=True)
     content_id = serializers.IntegerField(required=True, min_value=1)
+    content_type = serializers.CharField(required=False, default='reel', max_length=10)
     creator_id = serializers.IntegerField(required=False, min_value=1, allow_null=True)
     event_type = serializers.CharField(required=True, max_length=20)
     watch_pct = serializers.FloatField(required=False, default=0.0)
@@ -63,6 +65,14 @@ class RecEventSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 f'Invalid source "{value}". '
                 f'Must be one of: {", ".join(sorted(self.VALID_SOURCES))}'
+            )
+        return value
+
+    def validate_content_type(self, value):
+        if value not in self.VALID_CONTENT_TYPES:
+            raise serializers.ValidationError(
+                f'Invalid content_type "{value}". '
+                f'Must be one of: {", ".join(sorted(self.VALID_CONTENT_TYPES))}'
             )
         return value
 

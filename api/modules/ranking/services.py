@@ -63,6 +63,7 @@ def compute_popularity_score(event_rows, now=None):
 
     for row in event_rows:
         content_id = row['content_id']
+        content_type = row.get('content_type', 'reel')
         event_type = row['event_type']
         watch_pct = row.get('watch_pct', 0.0)
         timestamp = row['timestamp']
@@ -80,7 +81,7 @@ def compute_popularity_score(event_rows, now=None):
         age_hours = (now - timestamp).total_seconds() / 3600.0
         decay = math.exp(-0.693 * age_hours / POPULARITY_HALF_LIFE_HOURS)
 
-        scores[content_id] += base_weight * decay
+        scores[(content_type, content_id)] += base_weight * decay
 
     return dict(scores)
 
@@ -111,7 +112,8 @@ def compute_cf_scores(event_rows, min_cowatch=2):
 
     for row in event_rows:
         if row['event_type'] in POSITIVE_EVENTS:
-            user_items[row['user_id']].add(row['content_id'])
+            content_key = (row.get('content_type', 'reel'), row['content_id'])
+            user_items[row['user_id']].add(content_key)
 
     # Step 2: Build co-occurrence matrix
     # For each pair of items, count how many users engaged with both
