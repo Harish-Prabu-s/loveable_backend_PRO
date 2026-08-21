@@ -79,13 +79,38 @@ def generate_content_embeddings():
     # Generate embeddings in batch
     embeddings = model.encode(texts_to_embed)
     
+    # Simple keyword-based Auto-Tagging (Phase 2.3)
+    # If the text mentions these keywords, we auto-assign the topic tag
+    TOPIC_KEYWORDS = {
+        'comedy': ['funny', 'laugh', 'joke', 'hilarious', 'prank', 'comedy'],
+        'dance': ['dance', 'choreography', 'move', 'song', 'rhythm'],
+        'technology': ['tech', 'programming', 'code', 'software', 'app', 'gadget'],
+        'sports': ['game', 'match', 'play', 'football', 'basketball', 'cricket'],
+        'food': ['recipe', 'cook', 'delicious', 'tasty', 'foodie', 'eat'],
+    }
+    
+    from api.models import Hashtag
+    
     # Save to DB
     saved = 0
-    for item, emb in zip(all_content, embeddings):
+    for item, emb, text in zip(all_content, embeddings, texts_to_embed):
         content_type = 'reel' if isinstance(item, Reel) else 'post'
         obj = ContentEmbedding(content_id=item.id, content_type=content_type)
         obj.set_embedding(emb)
         obj.save()
+        
+        # Auto-tagging logic
+        text_lower = text.lower()
+        new_tags = []
+        for topic, keywords in TOPIC_KEYWORDS.items():
+            if any(kw in text_lower for kw in keywords):
+                # We found a match, get or create the topic tag
+                tag, _ = Hashtag.objects.get_or_create(name=topic)
+                new_tags.append(tag)
+                
+        if new_tags:
+            item.hashtags.add(*new_tags)
+            
         saved += 1
         
     logger.info(f"Generated embeddings for {saved} new items.")

@@ -22,7 +22,8 @@ def apply_mmr(scored_candidates: list, lambda_param: float = 0.3, max_consecutiv
     unselected = scored_candidates.copy()
     
     # Track what has been selected to compute redundancy
-    selected_tags = set()
+    selected_tags_all = set()
+    sliding_window_tags = [] # For "max 2 same topic in 5 reels" rule
     last_creator_id = None
     consecutive_creator_count = 0
     
@@ -34,27 +35,39 @@ def apply_mmr(scored_candidates: list, lambda_param: float = 0.3, max_consecutiv
             creator_id = meta.get('creator_id')
             tags = meta.get('tags', [])
             
-            # Strict constraint: creator fatigue
+            # Strict constraint 1: Creator fatigue
             if creator_id == last_creator_id and consecutive_creator_count >= max_consecutive_creator:
                 continue # Skip this candidate for now
                 
-            # Compute redundancy (Jaccard-like overlap of tags with already selected items)
+            # Strict constraint 2: Topic fatigue (max 2 same topic in last 5 reels)
+            topic_fatigued = False
+            if tags:
+                # Count occurrences of candidate's tags in the sliding window
+                for tag in tags:
+                    count = sliding_window_tags.count(tag)
+                    if count >= 2:
+                        topic_fatigued = True
+                        break
+            
+            if topic_fatigued:
+                continue
+                
+            # Compute redundancy (Jaccard-like overlap of tags with globally selected items)
             redundancy = 0.0
-            if selected_tags and tags:
-                overlap = len(set(tags).intersection(selected_tags))
+            if selected_tags_all and tags:
+                overlap = len(set(tags).intersection(selected_tags_all))
                 redundancy = overlap / len(tags)
                 
             # MMR Score Formula: λ * Relevance - (1 - λ) * Redundancy
-            # Note: score is usually unnormalized here, so we might just use a simple penalty
-            mmr_score = ((1.0 - lambda_param) * score) - (lambda_param * redundancy * 100) # scaling redundancy
+            mmr_score = ((1.0 - lambda_param) * score) - (lambda_param * redundancy * 100)
             
             if mmr_score > best_mmr_score:
                 best_mmr_score = mmr_score
                 best_idx = i
                 
         if best_idx == -1:
-            # If all remaining items violate strict constraints (e.g. all from same creator),
-            # just take the highest scored one and reset the fatigue counter.
+            # If all remaining items violate strict constraints, relax constraints 
+            # and just take the highest scored remaining item
             best_idx = 0
             
         # Move winner to selected
@@ -69,6 +82,12 @@ def apply_mmr(scored_candidates: list, lambda_param: float = 0.3, max_consecutiv
             last_creator_id = winner_creator_id
             consecutive_creator_count = 1
             
-        selected_tags.update(winner_meta.get('tags', []))
+        selected_tags_all.update(winner_meta.get('tags', []))
+        
+        # Update sliding window
+        sliding_window_tags.extend(winner_meta.get('tags', []))
+        # Keep window size reasonable (approx last 5 items = ~15 tags if avg 3 tags/item)
+        if len(sliding_window_tags) > 15:
+            sliding_window_tags = sliding_window_tags[-15:]
         
     return selected

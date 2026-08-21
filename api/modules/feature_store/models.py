@@ -40,3 +40,48 @@ class UserInterestProfile(models.Model):
     
     def __str__(self):
         return f"InterestProfile for User {self.user_id}"
+
+
+class UserInterestEntity(models.Model):
+    """
+    Stores granular, row-based interest tracking per user and per entity.
+    An 'entity' can be a CATEGORY (topic), a CREATOR, a BRAND, or a TAG.
+
+    This enables analytical SQL queries like 'find all users highly interested in cars'
+    or 'find all users with high creator affinity for user X', which is hard to do
+    with the JSON-based UserInterestProfile.
+    """
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='interest_entities'
+    )
+    entity_type = models.CharField(
+        max_length=20, 
+        choices=(
+            ('CATEGORY', 'Category'),
+            ('CREATOR', 'Creator'),
+            ('BRAND', 'Brand'),
+            ('TAG', 'Tag')
+        ),
+        db_index=True
+    )
+    # The unique identifier for the entity (e.g. topic string or creator_id)
+    entity_id = models.CharField(max_length=100, db_index=True)
+    
+    # Accumulated interest score (e.g. decayed sum of positive engagements)
+    interest_score = models.FloatField(default=0.0, db_index=True)
+    
+    # Raw engagement counts
+    positive_count = models.IntegerField(default=0)
+    negative_count = models.IntegerField(default=0)
+    
+    last_interacted_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'entity_type', 'entity_id')
+        indexes = [
+            models.Index(fields=['user', 'entity_type', '-interest_score']),
+            models.Index(fields=['entity_type', 'entity_id', '-interest_score']),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} -> {self.entity_type}:{self.entity_id} ({self.interest_score:.2f})"

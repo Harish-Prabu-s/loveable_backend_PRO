@@ -109,6 +109,40 @@ def sync_user_features():
             
             # Save to MySQL
             profile.save()
+
+            # Update Granular UserInterestEntities
+            from api.modules.ranking.services import EVENT_WEIGHTS
+            from api.modules.feature_store.models import UserInterestEntity
+
+            for event in event_dicts:
+                topics = event.get('topics', [])
+                event_type = event.get('event_type')
+                weight = EVENT_WEIGHTS.get(event_type, 0.0)
+
+                # Scale weight for watch-like events
+                if event_type in ('watch', 'replay', 'rewatch', 'rewatch_complete'):
+                    weight *= max(event.get('watch_pct', 0.0), 0.1)
+
+                is_positive = weight > 0
+                is_negative = weight < 0
+
+                for topic in topics:
+                    entity, created = UserInterestEntity.objects.get_or_create(
+                        user_id=user_id,
+                        entity_type='CATEGORY',
+                        entity_id=topic,
+                    )
+                    
+                    # Accumulate score (decay old score slowly, add new weight)
+                    # Simplified EMA: keep 90% of old score, add new weight
+                    entity.interest_score = (entity.interest_score * 0.9) + weight
+                    
+                    if is_positive:
+                        entity.positive_count += 1
+                    elif is_negative:
+                        entity.negative_count += 1
+                    
+                    entity.save()
             
             # Mirror to Redis
             profile_data = {

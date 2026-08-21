@@ -159,6 +159,13 @@ def consume_event_stream():
                     source=parsed['source'],
                     device_context=parsed['device_context'],
                 )
+                
+                # Populate Redis seen filter (Phase 4.3)
+                # Mark content as seen if it was watched, skipped, or interacted with
+                if parsed['event_type'] in ('watch', 'rewatch', 'rewatch_complete', 'skip', 'not_interested', 'hide', 'like'):
+                    from api.modules.rec_filter.seen import mark_as_seen
+                    mark_as_seen(user_id=parsed['user_id'], content_id=parsed['content_id'])
+                
                 processed += 1
                 ack_ids.append(msg_id)
 

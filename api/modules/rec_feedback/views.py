@@ -87,15 +87,69 @@ class WhyAmISeeingThisView(APIView):
         if not content_id:
             return Response({'error': 'content_id required'}, status=status.HTTP_400_BAD_REQUEST)
             
-        # In a fully fleshed out system, this would query the ContentScore and UserInterestProfile
-        # to find the overlapping vectors or the CF neighbor that caused the match.
-        # MVP placeholder logic:
-        return Response({
-            'reasons': [
-                "Because you've liked similar content recently.",
-                "This post is currently popular among people with similar interests."
-            ]
-        })
+        try:
+            from api.models import Reel
+            from api.modules.feature_store.models import UserInterestProfile
+            from api.modules.ranking.models import ContentScore, CreatorScore
+            import json
+            from api.modules.feature_store.tasks import _get_cache_redis
+            
+            reasons = []
+            
+            # 1. Fetch User Profile
+            r = _get_cache_redis()
+            profile_json = r.get(f"profile:{request.user.id}")
+            profile = json.loads(profile_json) if profile_json else {}
+            
+            # 2. Fetch Content
+            reel = Reel.objects.get(id=content_id)
+            tags = [tag.name.lower() for tag in reel.hashtags.all()]
+            
+            # 3. Check Topic Overlap
+            if profile and tags:
+                session_interests = profile.get('session', {})
+                short_interests = profile.get('short_term', {})
+                long_interests = profile.get('long_term', {})
+                
+                # Combine top interests
+                all_interests = {**long_interests, **short_interests, **session_interests}
+                # Sort by weight
+                top_user_topics = sorted(all_interests.items(), key=lambda x: x[1], reverse=True)[:10]
+                top_topic_names = [t[0] for t in top_user_topics]
+                
+                overlap = set(tags).intersection(set(top_topic_names))
+                if overlap:
+                    topic = list(overlap)[0].title()
+                    reasons.append(f"Because you've shown interest in {topic} content recently.")
+            
+            # 4. Check Creator Quality
+            try:
+                creator_score = CreatorScore.objects.get(creator_id=reel.user_id)
+                if creator_score.quality_score > 70:
+                    reasons.append(f"This is from a high-quality creator whose content is well-received.")
+            except CreatorScore.DoesNotExist:
+                pass
+                
+            # 5. Check Global Popularity
+            try:
+                c_score = ContentScore.objects.get(content_id=content_id)
+                if c_score.popularity_score > 10.0: # Arbitrary threshold
+                    reasons.append("This post is currently popular across the community.")
+                elif c_score.cf_score > 0.5:
+                    reasons.append("People with similar interests to yours engaged with this.")
+            except ContentScore.DoesNotExist:
+                pass
+                
+            if not reasons:
+                reasons.append("This was recommended to help you discover new types of content.")
+                
+            return Response({'reasons': reasons})
+            
+        except Exception as e:
+            logger.error(f"Failed to generate explainability reasons: {e}")
+            return Response({
+                'reasons': ["We thought you might find this interesting!"]
+            })
 
 class ResetRecommendationsView(APIView):
     """

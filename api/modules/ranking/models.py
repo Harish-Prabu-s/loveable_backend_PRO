@@ -55,3 +55,25 @@ class ContentScore(models.Model):
             f'pop={self.popularity_score:.2f} cf={self.cf_score:.2f} '
             f'combined={self.combined_score:.2f}'
         )
+
+class CreatorScore(models.Model):
+    """
+    Pre-computed quality scores for creators, aggregated from all their content.
+    Used as the 'creator affinity' (C) term in the ranking formula.
+    """
+    creator_id = models.PositiveBigIntegerField(unique=True, db_index=True)
+    
+    # Raw metrics
+    avg_completion_rate = models.FloatField(default=0.0)
+    share_rate = models.FloatField(default=0.0)
+    save_rate = models.FloatField(default=0.0)
+    report_rate = models.FloatField(default=0.0)
+    upload_count_30d = models.IntegerField(default=0)
+    
+    # Final aggregated score (higher is better)
+    quality_score = models.FloatField(default=0.0, db_index=True)
+    
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'CreatorScore(creator_id={self.creator_id}, quality={self.quality_score:.2f})'

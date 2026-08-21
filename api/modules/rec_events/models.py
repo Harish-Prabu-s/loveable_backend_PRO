@@ -39,6 +39,11 @@ class RecEvent(models.Model):
         ('not_interested', 'Not Interested'),
         ('hide', 'Hide'),
         ('report', 'Report'),
+        # Rewatch / revisit event types (Blueprint §5-§8)
+        ('revisit', 'Revisit'),                    # User scrolled back to previously seen content
+        ('rewatch', 'Rewatch'),                    # User actively watches previously seen content again
+        ('rewatch_complete', 'Rewatch Complete'),  # User completes a rewatch
+        ('navigation_back', 'Navigation Back'),    # Neutral backward scroll navigation
     )
 
     SOURCE_CHOICES = (
@@ -86,6 +91,12 @@ class RecEvent(models.Model):
     device_context = models.JSONField(
         default=dict, blank=True,
         help_text='Flexible client metadata: time_of_day, platform, etc.',
+    )
+
+    # Granular watch milestones (Blueprint §2 event pipeline)
+    milestones = models.JSONField(
+        default=list, blank=True,
+        help_text='Array of granular milestones crossed, e.g. ["play_start", "2s", "25%", "50%"].',
     )
 
     # Abuse flagging (Task 13 will use this)

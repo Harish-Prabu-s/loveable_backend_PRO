@@ -43,6 +43,9 @@ urlpatterns = [
     path('rec/', include('api.modules.rec_feed.urls')),
     path('rec/', include('api.modules.rec_feedback.urls')),
     path('rec/', include('api.modules.rec_privacy.urls')),
+    
+    # ── Onboarding ──────────────────────────────────────────────────────────
+    path('onboarding/', include('api.modules.onboarding.urls')),
 
 
     # Legacy endpoints remain accessible if needed

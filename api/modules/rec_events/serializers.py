@@ -23,6 +23,8 @@ class RecEventSerializer(serializers.Serializer):
     VALID_EVENT_TYPES = {
         'watch', 'replay', 'like', 'save', 'share', 'comment',
         'follow', 'skip', 'not_interested', 'hide', 'report',
+        # Rewatch / revisit event types (Blueprint §5-§8)
+        'revisit', 'rewatch', 'rewatch_complete', 'navigation_back',
     }
     VALID_SOURCES = {'feed', 'search', 'profile', 'explore'}
 
@@ -35,6 +37,11 @@ class RecEventSerializer(serializers.Serializer):
     timestamp = serializers.DateTimeField(required=True)
     source = serializers.CharField(required=False, default='feed', max_length=20)
     device_context = serializers.DictField(required=False, default=dict)
+    # Granular milestones (Blueprint §2): e.g. ['play_start', '2s', '25%', '50%', '75%', '100%']
+    milestones = serializers.ListField(
+        child=serializers.CharField(max_length=20),
+        required=False, default=list,
+    )
 
     def validate_event_type(self, value):
         if value not in self.VALID_EVENT_TYPES:
@@ -64,13 +71,14 @@ class RecEventSerializer(serializers.Serializer):
         event_type = data.get('event_type')
         watch_pct = data.get('watch_pct', 0.0)
 
-        # watch_pct is only meaningful for watch/replay events
-        if event_type in ('watch', 'replay') and watch_pct == 0.0:
+        # watch_pct is meaningful for watch, replay, rewatch, and rewatch_complete events
+        WATCH_LIKE_EVENTS = ('watch', 'replay', 'rewatch', 'rewatch_complete')
+        if event_type in WATCH_LIKE_EVENTS and watch_pct == 0.0:
             # Allow 0.0 (user opened but immediately closed), but warn
             pass
 
         # Non-watch events should not have a meaningful watch_pct
-        if event_type not in ('watch', 'replay') and watch_pct > 0.0:
+        if event_type not in WATCH_LIKE_EVENTS and watch_pct > 0.0:
             data['watch_pct'] = 0.0  # Silently zero it out
 
         return data

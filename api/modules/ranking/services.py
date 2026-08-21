@@ -36,6 +36,11 @@ EVENT_WEIGHTS = {
     'not_interested': -5.0,
     'hide': -3.0,
     'report': -10.0,
+    # Rewatch / revisit event types (Blueprint §5-§8)
+    'revisit': 1.5,              # User scrolled back — moderate positive
+    'rewatch': 5.0,              # Intentional rewatch — strong positive
+    'rewatch_complete': 7.0,     # Completed a rewatch — very strong positive
+    'navigation_back': 0.0,     # Neutral navigation signal
 }
 
 

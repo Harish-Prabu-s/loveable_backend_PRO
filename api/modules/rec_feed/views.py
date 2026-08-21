@@ -65,15 +65,31 @@ class RecommendedFeedView(APIView):
 
     def get(self, request):
         user_id = request.user.id
+        
+        try:
+            page = int(request.query_params.get('page', 1))
+            limit = int(request.query_params.get('limit', 20))
+        except ValueError:
+            page = 1
+            limit = 20
 
         try:
             r = _get_cache_redis()
-            feed_json = r.get(f'feed:{user_id}')
+            feed_json = r.get(f'feed:{user_id}:page:{page}')
 
             if feed_json:
                 items = json.loads(feed_json)
+                
+                # Check if next page exists
+                next_page_json = r.get(f'feed:{user_id}:page:{page + 1}')
+                has_next = next_page_json is not None
+                
                 return Response({
                     'source': 'recommendation',
+                    'page': page,
+                    'limit': limit,
+                    'has_next': has_next,
+                    'next_page': page + 1 if has_next else None,
                     'items': items,
                     'count': len(items),
                 })
@@ -112,6 +128,10 @@ class RecommendedFeedView(APIView):
 
             return Response({
                 'source': 'fallback',
+                'page': page,
+                'limit': limit,
+                'has_next': False,
+                'next_page': None,
                 'items': items,
                 'count': len(items),
             })

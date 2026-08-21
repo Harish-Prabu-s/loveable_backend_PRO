@@ -71,7 +71,7 @@ def update_interest_vectors(profile, recent_events, now=None):
         topics = event.get('topics', [])
         
         weight = EVENT_WEIGHTS.get(event_type, 0.0)
-        if event_type in ('watch', 'replay'):
+        if event_type in ('watch', 'replay', 'rewatch', 'rewatch_complete'):
             weight *= max(event.get('watch_pct', 0.0), 0.1)
             
         for topic in topics:
