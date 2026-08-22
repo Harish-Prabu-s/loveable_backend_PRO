@@ -89,13 +89,19 @@ class UserInterestEntity(models.Model):
 
 class UserSocialAffinity(models.Model):
     """
-    Stores the relationship strength between two users based on messaging,
-    profile views, tagging, and interactions.
+    Blueprint §5. Tracks computed affinity score and interaction counts between two users.
     """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='social_affinities')
-    target_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='social_affinities_target')
+    target_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='targeted_by_affinities')
     
-    affinity_score = models.FloatField(default=0.0, db_index=True)
+    affinity_score = models.DecimalField(max_digits=6, decimal_places=4, default=0, db_index=True)
+    message_score = models.DecimalField(max_digits=6, decimal_places=4, default=0)
+    profile_score = models.DecimalField(max_digits=6, decimal_places=4, default=0)
+    content_score = models.DecimalField(max_digits=6, decimal_places=4, default=0)
+    comment_score = models.DecimalField(max_digits=6, decimal_places=4, default=0)
+    tag_score = models.DecimalField(max_digits=6, decimal_places=4, default=0)
+    follow_score = models.DecimalField(max_digits=6, decimal_places=4, default=0)
+    
     interaction_count = models.IntegerField(default=0)
     last_interaction_at = models.DateTimeField(auto_now=True)
 
@@ -106,7 +112,63 @@ class UserSocialAffinity(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.user_id} -> {self.target_user_id} ({self.affinity_score:.2f})"
+        return f"{self.user_id} -> {self.target_user_id} (Score: {self.affinity_score})"
+
+
+class SocialDiscoveryEvent(models.Model):
+    """
+    Blueprint §2.6 / §5. Durable log of why a user became interested in another user.
+    """
+    actor_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='discovery_events_initiated')
+    target_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='discovery_events_received')
+    
+    source_type = models.CharField(max_length=40, help_text="e.g. REEL_LIKER, COMMENTER, FLOATING_PROFILE")
+    source_content_id = models.PositiveBigIntegerField(null=True, blank=True)
+    surface = models.CharField(max_length=40, help_text="e.g. FLOATING_PROFILE, COMMENT_SECTION")
+    event_type = models.CharField(max_length=40)
+    
+    INTERACTION_STRENGTH_CHOICES = (
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('STRONG', 'Strong'),
+        ('VERY_STRONG', 'Very Strong'),
+    )
+    interaction_strength = models.CharField(max_length=20, choices=INTERACTION_STRENGTH_CHOICES, default='LOW')
+    interaction_score = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    
+    session_id = models.CharField(max_length=64, null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['actor_user', 'target_user', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.actor_user_id} discovered {self.target_user_id} via {self.source_type}"
+
+
+class ProfileViewEvent(models.Model):
+    """
+    Blueprint §2.6 / §5.5. Tracks profile view sources.
+    """
+    viewer_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='profile_views_made')
+    profile_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='profile_views_received')
+    
+    source_type = models.CharField(max_length=40, help_text="e.g. REEL, POST, SEARCH, FLOATING_PROFILE")
+    source_content_id = models.PositiveBigIntegerField(null=True, blank=True)
+    source_user_id = models.PositiveBigIntegerField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['viewer_user', 'profile_user', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.viewer_user_id} viewed {self.profile_user_id} via {self.source_type}"
 
 
 class UserCreatorAffinity(models.Model):

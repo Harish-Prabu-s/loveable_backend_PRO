@@ -284,3 +284,4 @@ class UserContentInterest(models.Model):
 
     def __str__(self):
         return f"{self.user_id} -> {self.content_type}:{self.content_id} ({self.last_action})"
+

@@ -465,3 +465,142 @@ def _flush_session(user_id: int, session_id: str):
         satisfaction_score=satisfaction
     )
     logger.info(f"Flushed session {session_id} for user {user_id}")
+
+
+@shared_task(name='api.modules.rec_events.tasks.consume_social_event_stream')
+def consume_social_event_stream():
+    """
+    Consumes events from the 'social-events' Redis Stream.
+    Writes to SocialDiscoveryEvent, ProfileViewEvent, and updates UserSocialAffinity.
+    """
+    from api.modules.feature_store.models import SocialDiscoveryEvent, ProfileViewEvent, UserSocialAffinity
+    from django.db.models import F
+
+    r = _get_stream_redis()
+    SOCIAL_STREAM_KEY = 'social-events'
+    SOCIAL_CONSUMER_GROUP = 'social-event-workers'
+    
+    try:
+        r.xgroup_create(SOCIAL_STREAM_KEY, SOCIAL_CONSUMER_GROUP, id='0', mkstream=True)
+    except redis.ResponseError as e:
+        if 'BUSYGROUP' not in str(e):
+            raise
+
+    consumer_name = f'worker-{uuid.uuid4().hex[:8]}'
+
+    try:
+        messages = r.xreadgroup(
+            SOCIAL_CONSUMER_GROUP,
+            consumer_name,
+            {SOCIAL_STREAM_KEY: '>'},
+            count=BATCH_SIZE,
+            block=BLOCK_MS,
+        )
+    except redis.RedisError as e:
+        logger.error(f'Error reading from social stream: {e}')
+        return {'processed': 0, 'errors': 1}
+
+    if not messages:
+        return {'processed': 0, 'errors': 0}
+
+    processed = 0
+    errors = 0
+    ack_ids = []
+
+    for stream_name, entries in messages:
+        for msg_id, fields in entries:
+            try:
+                event_type = fields.get('event_type')
+                actor_user_id = int(fields['actor_user_id'])
+                target_user_id = int(fields['target_user_id'])
+                
+                source = json.loads(fields.get('source', '{}'))
+                interaction = json.loads(fields.get('interaction', '{}'))
+                
+                interaction_strength = interaction.get('strength', 'LOW')
+                interaction_score = float(interaction.get('score', 0))
+                
+                # 1. Log ProfileViewEvent if applicable
+                if event_type == 'PROFILE_OPEN':
+                    ProfileViewEvent.objects.create(
+                        viewer_user_id=actor_user_id,
+                        profile_user_id=target_user_id,
+                        source_type=source.get('surface', 'UNKNOWN'),
+                        source_content_id=source.get('id'),
+                    )
+                
+                # 2. Log SocialDiscoveryEvent
+                SocialDiscoveryEvent.objects.create(
+                    actor_user_id=actor_user_id,
+                    target_user_id=target_user_id,
+                    source_type=source.get('type', 'UNKNOWN'),
+                    source_content_id=source.get('id'),
+                    surface=source.get('surface', 'UNKNOWN'),
+                    event_type=event_type,
+                    interaction_strength=interaction_strength,
+                    interaction_score=interaction_score,
+                    session_id=fields.get('feed_session_id'),
+                    metadata=json.loads(fields.get('context', '{}'))
+                )
+                
+                # 3. Update UserSocialAffinity
+                affinity, created = UserSocialAffinity.objects.get_or_create(
+                    user_id=actor_user_id,
+                    target_user_id=target_user_id,
+                )
+                
+                update_kwargs = {
+                    'interaction_count': F('interaction_count') + 1,
+                    'affinity_score': F('affinity_score') + interaction_score,
+                    'last_interaction_at': timezone.now()
+                }
+                
+                if event_type == 'MESSAGE_SENT_FROM_SOCIAL_CARD':
+                    update_kwargs['message_score'] = F('message_score') + interaction_score
+                elif event_type == 'PROFILE_CARD_OPEN' or event_type == 'PROFILE_OPEN':
+                    update_kwargs['profile_score'] = F('profile_score') + interaction_score
+                elif event_type in ('REACTION', 'REPOST_FROM_SOCIAL_CONTEXT', 'COMMENT_FROM_SOCIAL_CONTEXT'):
+                    update_kwargs['content_score'] = F('content_score') + interaction_score
+                    
+                UserSocialAffinity.objects.filter(id=affinity.id).update(**update_kwargs)
+
+                processed += 1
+                ack_ids.append(msg_id)
+            except Exception as e:
+                logger.error(f'Failed to process social event {msg_id}: {e}')
+                errors += 1
+
+    if ack_ids:
+        try:
+            r.xack(SOCIAL_STREAM_KEY, SOCIAL_CONSUMER_GROUP, *ack_ids)
+        except redis.RedisError as e:
+            logger.error(f'Failed to acknowledge social messages: {e}')
+
+    return {'processed': processed, 'errors': errors}
+
+
+@shared_task(name='api.modules.rec_events.tasks.decay_social_affinity_scores')
+def decay_social_affinity_scores():
+    """
+    Nightly Celery beat task to decay social affinity scores.
+    Multiplies affinity_score by 0.98.
+    """
+    from api.modules.feature_store.models import UserSocialAffinity
+    from django.db.models import F
+
+    DECAY_FACTOR = 0.98
+    
+    # In a production environment, this should be done in batches
+    # or using a direct SQL UPDATE to avoid loading all objects.
+    # For now, we use a single UPDATE query via F expressions.
+    updated = UserSocialAffinity.objects.update(
+        affinity_score=F('affinity_score') * DECAY_FACTOR,
+        message_score=F('message_score') * DECAY_FACTOR,
+        profile_score=F('profile_score') * DECAY_FACTOR,
+        content_score=F('content_score') * DECAY_FACTOR,
+        comment_score=F('comment_score') * DECAY_FACTOR,
+        tag_score=F('tag_score') * DECAY_FACTOR,
+        follow_score=F('follow_score') * DECAY_FACTOR,
+    )
+    
+    logger.info(f"Decayed social affinity scores for {updated} records.")
