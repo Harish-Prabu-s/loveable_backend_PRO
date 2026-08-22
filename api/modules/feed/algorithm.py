@@ -42,11 +42,11 @@ def _get_user_interest_profile(user):
 
     # Posts the user liked/viewed/commented on recently
     liked_posts  = PostLike.objects.filter(user=user, created_at__gte=cutoff).values_list('post_id', flat=True)
-    viewed_posts = PostView.objects.filter(user=user, viewed_at__gte=cutoff).values_list('post_id', flat=True)
+    viewed_posts = PostView.objects.filter(viewer=user, viewed_at__gte=cutoff).values_list('post_id', flat=True)
     commented_posts = PostComment.objects.filter(user=user, created_at__gte=cutoff).values_list('post_id', flat=True)
 
     liked_reels  = ReelLike.objects.filter(user=user, created_at__gte=cutoff).values_list('reel_id', flat=True)
-    viewed_reels = ReelView.objects.filter(user=user, viewed_at__gte=cutoff).values_list('reel_id', flat=True)
+    viewed_reels = ReelView.objects.filter(viewer=user, viewed_at__gte=cutoff).values_list('reel_id', flat=True)
     commented_reels = ReelComment.objects.filter(user=user, created_at__gte=cutoff).values_list('reel_id', flat=True)
 
     # Collect all post/reel IDs user engaged with
